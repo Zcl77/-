@@ -1,0 +1,130 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&family=Playfair+Display:ital,wght@0,400;0,600;1,400;1,600&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&display=swap');
+@import "tailwindcss";
+
+/* Fallback for local system files of italic fonts to override standard normal Latin alphabet */
+@font-face {
+  font-family: "Inter-English-Italic";
+  font-style: normal;
+  font-weight: 300;
+  src: local("Inter Italic"), local("Inter-Italic"), url('https://fonts.gstatic.com/s/inter/v18/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa2boKoduKmMEVuLyfMZhrib2D-g.woff2') format('woff2');
+  unicode-range: U+0041-005A, U+0061-007A;
+}
+@font-face {
+  font-family: "Inter-English-Italic";
+  font-style: normal;
+  font-weight: 400;
+  src: local("Inter Italic"), local("Inter-Italic"), url('https://fonts.gstatic.com/s/inter/v18/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa1ZL7W0Q5nw.woff2') format('woff2');
+  unicode-range: U+0041-005A, U+0061-007A;
+}
+@font-face {
+  font-family: "Inter-English-Italic";
+  font-style: normal;
+  font-weight: 500;
+  src: local("Inter Italic"), local("Inter-Italic"), url('https://fonts.gstatic.com/s/inter/v18/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa2boKoduKmMEVuLyfMZhrib2D-g.woff2') format('woff2');
+  unicode-range: U+0041-005A, U+0061-007A;
+}
+@font-face {
+  font-family: "Inter-English-Italic";
+  font-style: normal;
+  font-weight: 600;
+  src: local("Inter Italic"), local("Inter-Italic"), url('https://fonts.gstatic.com/s/inter/v18/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa2boKoduKmMEVuLyfMZhrib2D-g.woff2') format('woff2');
+  unicode-range: U+0041-005A, U+0061-007A;
+}
+@font-face {
+  font-family: "Inter-English-Italic";
+  font-style: normal;
+  font-weight: 700;
+  src: local("Inter Italic"), local("Inter-Italic"), url('https://fonts.gstatic.com/s/inter/v18/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa2boKoduKmMEVuLyfMZhrib2D-g.woff2') format('woff2');
+  unicode-range: U+0041-005A, U+0061-007A;
+}
+
+@font-face {
+  font-family: "Playfair-English-Italic";
+  font-style: normal;
+  font-weight: 400;
+  src: local("Playfair Display Italic"), local("PlayfairDisplay-Italic"), url('https://fonts.gstatic.com/s/playfairdisplay/v37/nuFfD-vL0oy9_SHws_M71v9TxbSrf7ALVy-iOTGz7Xw0b9D_Z3gTHb_E3w.woff2') format('woff2');
+  unicode-range: U+0041-005A, U+0061-007A;
+}
+@font-face {
+  font-family: "Playfair-English-Italic";
+  font-style: normal;
+  font-weight: 600;
+  src: local("Playfair Display Italic"), local("PlayfairDisplay-Italic"), url('https://fonts.gstatic.com/s/playfairdisplay/v37/nuFfD-vL0oy9_SHws_M71v9TxbSrf7ALVy-iOTGz7Xw0b9D_Z3gTHb_E3w.woff2') format('woff2');
+  unicode-range: U+0041-005A, U+0061-007A;
+}
+
+@font-face {
+  font-family: "Mono-English-Italic";
+  font-style: normal;
+  font-weight: 300;
+  src: local("JetBrains Mono Italic"), local("JetBrainsMono-Italic"), url('https://fonts.gstatic.com/s/jetbrainsmono/v18/t6q_25GT29_mI88V6NzKga8vj-786mI6NfcKscv7.woff2') format('woff2');
+  unicode-range: U+0041-005A, U+0061-007A;
+}
+@font-face {
+  font-family: "Mono-English-Italic";
+  font-style: normal;
+  font-weight: 400;
+  src: local("JetBrains Mono Italic"), local("JetBrainsMono-Italic"), url('https://fonts.gstatic.com/s/jetbrainsmono/v18/t6q_25GT29_mI88V6NzKga8vj-786mI6NfcKscv7.woff2') format('woff2');
+  unicode-range: U+0041-005A, U+0061-007A;
+}
+@font-face {
+  font-family: "Mono-English-Italic";
+  font-style: normal;
+  font-weight: 500;
+  src: local("JetBrains Mono Italic"), local("JetBrainsMono-Italic"), url('https://fonts.gstatic.com/s/jetbrainsmono/v18/t6q_25GT29_mI88V6NzKga8vj-786mI6NfcKscv7.woff2') format('woff2');
+  unicode-range: U+0041-005A, U+0061-007A;
+}
+
+@theme {
+  --font-sans: "Inter-English-Italic", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair-English-Italic", "Playfair Display", Georgia, serif;
+  --font-mono: "Mono-English-Italic", "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Custom Oriental/Guofeng palette */
+  --color-gf-rice: #E8DFCE;  /* 温润绢画纸底色 */
+  --color-gf-sand: #DFB896;  /* 柔砂融金秋色 */
+  --color-gf-tea: #A38A6C;   /* 幽玄静禅茶褐 */
+  --color-gf-wood: #66321C;  /* 古雅绛漆木红 */
+}
+
+@layer utilities {
+  .vertical-text {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+  }
+  
+  .macro-gradient {
+    background: radial-gradient(circle at 75% 35%, #F0E8D9 0%, #E8DFCE 100%);
+  }
+
+  .premium-shadow {
+    box-shadow: 0 10px 40px -10px rgba(102, 50, 28, 0.12), 0 4px 10px -4px rgba(102, 50, 28, 0.08);
+  }
+
+  .soft-glass {
+    background: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(163, 138, 108, 0.15);
+  }
+
+  .glow-border {
+    border: 1px solid rgba(102, 50, 28, 0.12);
+  }
+
+  /* Custom styled scrollbars for warm oriental theme */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #E8DFCE;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #A38A6C;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #66321C;
+  }
+}

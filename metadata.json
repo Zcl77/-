@@ -1,0 +1,8 @@
+{
+  "name": "指尖造物 - 微缩模型艺术家沉浸式数字展厅",
+  "description": "致力于极致细节与故事感呈现的微缩模型作品定制网站，配备高端黑箱展厅艺廊、在制工场进度追踪时间轴、定制企划意向书及工作室控制台控制后台。",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
