@@ -1,627 +1,236 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import { useState, useEffect } from 'react';
-import { Project, Review, CraftsmanProfile, StudioSettings } from './types';
-import { INITIAL_PROJECTS, INITIAL_REVIEWS } from './data';
-import Sidebar from './components/Sidebar';
-import GalleryView from './components/GalleryView';
-import WIPTimeline from './components/WIPTimeline';
-import CommissionForm from './components/CommissionForm'; // Repurposed for user rating comments
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import AdminDashboard from './components/AdminDashboard';
-import { motion, AnimatePresence } from 'motion/react';
-import { db, loginWithGoogle, logoutFromGoogle, auth } from './firebase';
-import { collection, onSnapshot, doc, setDoc, getDocs, writeBatch } from 'firebase/firestore';
-import { compressImage } from './imageResizer';
+import CommissionForm from './components/CommissionForm';
+import GalleryView from './components/GalleryView';
+import Sidebar from './components/Sidebar';
+import WIPTimeline from './components/WIPTimeline';
+import { getPublicProjects, retainReferencedAssets } from './domain/visibility';
+import { useAdminAuth } from './hooks/useAdminAuth';
+import { useStudioData } from './hooks/useStudioData';
+import { deleteStoredImage, uploadPublicImage } from './services/firebase/storageRepository';
+import { CraftsmanProfile, ImageEditContext, Project, StoredImage, StudioSettings } from './types';
 
-export interface ImageEditContext {
-  type: 'project-cover' | 'project-image' | 'room-cover' | 'room-image' | 'craftsman-qr' | 'master-qr';
-  projectId?: string;
-  imageIndex?: number;
-  roomId?: string;
-  craftsmanName?: string;
+type AppTab = 'gallery' | 'wip' | 'commission' | 'admin';
+
+async function deleteAssets(assets: StoredImage[]): Promise<number> {
+  const results = await Promise.allSettled(assets.map((asset) => deleteStoredImage(asset)));
+  return results.filter((result) => result.status === 'rejected').length;
+}
+
+async function cleanRemovedAssets(previous: StoredImage[] = [], next: StoredImage[] = []): Promise<number> {
+  const retainedPaths = new Set(next.map((asset) => asset.path));
+  const removed = previous.filter((asset) => !retainedPaths.has(asset.path));
+  return deleteAssets(removed);
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'gallery' | 'wip' | 'commission' | 'admin'>('gallery');
-  const targetStyles = ['岭南市井烟火', '西洋折衷主义', '古典金石微刻', '水上水乡生态'];
-
-  const [projects, setProjects] = useState<Project[]>(() => {
-    const saved = localStorage.getItem('MINI_PORTFOLIO_PROJECTS_V2');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.map(p => ({
-            ...p,
-            images: p.images || [],
-            worksteps: p.worksteps || [],
-            rooms: (p.rooms || []).map((r: any) => ({
-              ...r,
-              images: r.images || [],
-              detailsList: r.detailsList || []
-            })),
-            authors: p.authors || []
-          }));
-        }
-      } catch (e) {
-        // Fallback
-      }
-    }
-    localStorage.setItem('MINI_PORTFOLIO_PROJECTS_V2', JSON.stringify(INITIAL_PROJECTS));
-    return INITIAL_PROJECTS;
-  });
-
-  const [reviews, setReviews] = useState<Review[]>(() => {
-    const saved = localStorage.getItem('MINI_PORTFOLIO_REVIEWS_V2');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      } catch (e) {
-        // Fallback
-      }
-    }
-    localStorage.setItem('MINI_PORTFOLIO_REVIEWS_V2', JSON.stringify(INITIAL_REVIEWS));
-    return INITIAL_REVIEWS;
-  });
-
-  const [categories, setCategories] = useState<string[]>(() => {
-    const saved = localStorage.getItem('MINI_PORTFOLIO_CATEGORIES_V3');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      } catch (e) {
-        // Fallback
-      }
-    }
-    localStorage.setItem('MINI_PORTFOLIO_CATEGORIES_V3', JSON.stringify(targetStyles));
-    return targetStyles;
-  });
-
-  const [hiddenCategories, setHiddenCategories] = useState<string[]>(() => {
-    const saved = localStorage.getItem('MINI_PORTFOLIO_HIDDEN_CATEGORIES_V3');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      } catch (e) {
-        // Fallback
-      }
-    }
-    return [];
-  });
-
-  // Admin authentication
-  const [isAdmin, setIsAdmin] = useState<boolean>(false);
-
-  useEffect(() => {
-    const unsub = auth.onAuthStateChanged(user => {
-      if (user && user.emailVerified) {
-        setIsAdmin(true);
-        sessionStorage.setItem('MINI_PORTFOLIO_IS_ADMIN', 'true');
-      } else {
-        setIsAdmin(false);
-        sessionStorage.removeItem('MINI_PORTFOLIO_IS_ADMIN');
-      }
-    });
-    return () => unsub();
-  }, []);
-
-  // Craftsman profiles & overall studio settings
-  const [craftsmenProfiles, setCraftsmenProfiles] = useState<Record<string, CraftsmanProfile>>(() => {
-    const defaultCraftsmen: Record<string, CraftsmanProfile> = {
-      '邓政松': { name: '邓政松', wechatId: 'dzs_micro' },
-      '黄铭涛': { name: '黄铭涛', wechatId: 'hmt_craft' },
-      '夏小军': { name: '夏小军', wechatId: 'xxj_minia' },
-      '李泽楠': { name: '李泽楠', wechatId: 'lzn_studio' },
-      '彭宇辰': { name: '彭宇辰', wechatId: 'pyc_crafts' },
-      '郑钰玲': { name: '郑钰玲', wechatId: 'zyl_texture' },
-      '赵忱璐': { name: '赵忱璐', wechatId: 'chenluzhao06' }
-    };
-    const saved = localStorage.getItem('MINI_PORTFOLIO_CRAFTSMEN_V1');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return { ...defaultCraftsmen, ...parsed };
-      } catch (e) {
-        // Fallback
-      }
-    }
-    localStorage.setItem('MINI_PORTFOLIO_CRAFTSMEN_V1', JSON.stringify(defaultCraftsmen));
-    return defaultCraftsmen;
-  });
-
-  const [studioSettings, setStudioSettings] = useState<StudioSettings>(() => {
-    const defaultSettings: StudioSettings = {
-      wechatId: 'chenluzhao06',
-      wechatQrUrl: ''
-    };
-    const saved = localStorage.getItem('MINI_PORTFOLIO_SETTINGS_V1');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return { ...defaultSettings, ...parsed };
-      } catch (e) {
-        // Fallback
-      }
-    }
-    localStorage.setItem('MINI_PORTFOLIO_SETTINGS_V1', JSON.stringify(defaultSettings));
-    return defaultSettings;
-  });
-
-  // Currently selected image frame context for edit replacement
+  const [activeTab, setActiveTab] = useState<AppTab>('gallery');
   const [activeEditContext, setActiveEditContext] = useState<ImageEditContext | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const { authState, isAdmin, login, logout } = useAdminAuth();
+  const studio = useStudioData(isAdmin);
 
-  // Subtle alert toast for block of download or copy
-  const [blockAlert, setBlockAlert] = useState<string | null>(null);
-
-  // Sync general settings changes
-  const handleUpdateSettings = async (newSettings: StudioSettings) => {
-    setStudioSettings(newSettings);
-    try {
-      await setDoc(doc(db, 'metadata', 'settings'), newSettings);
-    } catch (e) { console.error(e); }
-  };
-
-  // Sync craftsman profiles changes
-  const handleUpdateCraftsmenProfiles = async (newProfiles: Record<string, CraftsmanProfile>) => {
-    setCraftsmenProfiles(newProfiles);
-    try {
-      await setDoc(doc(db, 'metadata', 'craftsmen'), { profiles: newProfiles });
-    } catch (e) { console.error(e); }
-  };
-
-  // 2. Synchronize Project modifications immediately
-  const handleUpdateProjects = async (newProjectsList: Project[]) => {
-    const prevIds = new Set<string>(projects.map(p => p.id));
-    const newIds = new Set<string>(newProjectsList.map(p => p.id));
-    const removedIds = Array.from(prevIds).filter(id => !newIds.has(id));
-    setProjects(newProjectsList);
-    
-    const sanitizeProject = (p: Project): Project => {
-      const maxSize = 950000; // Skip individual huge base64 fields if they are nearly 1MB by themselves
-      const sanitizeImage = (img: string | undefined) => (!img || img.length > maxSize) ? '' : img;
-      
-      return {
-        ...p,
-        coverUrl: sanitizeImage(p.coverUrl),
-        images: (p.images || []).map(sanitizeImage),
-        rooms: (p.rooms || []).map(r => ({ ...r, images: (r.images || []).map(sanitizeImage) })),
-        worksteps: (p.worksteps || []).map(s => ({ ...s, image: sanitizeImage(s.image), images: (s.images || []).map(sanitizeImage) }))
-      };
-    };
-
-    try {
-      const batch = writeBatch(db);
-      newProjectsList.forEach(p => {
-        batch.set(doc(db, 'projects', String(p.id)), sanitizeProject(p));
-      });
-      removedIds.forEach(id => {
-        batch.delete(doc(db, 'projects', String(id)));
-      });
-      await batch.commit();
-    } catch (e) {
-      console.error(e);
-      // Fallback: try individual sets if batch still too big
-      for (const p of newProjectsList) {
-        try {
-          await setDoc(doc(db, 'projects', String(p.id)), sanitizeProject(p));
-        } catch (inner) {
-          console.error(`Failed to save project ${p.id}: `, inner);
-        }
-      }
-    }
-  };
-
-  // 3. Synchronize Categories modifications immediately
-  const handleUpdateCategories = async (newCategoriesList: string[]) => {
-    setCategories(newCategoriesList);
-    try {
-      await setDoc(doc(db, 'metadata', 'categories'), { list: newCategoriesList });
-    } catch (e) { console.error(e); }
-  };
-
-  // 3.5. Synchronize Hidden Categories
-  const handleUpdateHiddenCategories = async (newHiddenList: string[]) => {
-    setHiddenCategories(newHiddenList);
-    try {
-      await setDoc(doc(db, 'metadata', 'hiddenCategories'), { list: newHiddenList });
-    } catch (e) { console.error(e); }
-  };
-
-  // 4. Synchronize Reviews modifications immediately
-  const handleUpdateReviews = async (newReviewsList: Review[]) => {
-    const prevIds = new Set<string>(reviews.map(p => p.id));
-    const newIds = new Set<string>(newReviewsList.map(p => p.id));
-    const removedIds = Array.from(prevIds).filter(id => !newIds.has(id));
-    setReviews(newReviewsList);
-    try {
-      const batch = writeBatch(db);
-      newReviewsList.forEach(p => {
-        batch.set(doc(db, 'reviews', String(p.id)), p);
-      });
-      removedIds.forEach(id => {
-        batch.delete(doc(db, 'reviews', String(id)));
-      });
-      await batch.commit();
-    } catch (e) { console.error(e); }
-  };
+  const publicProjects = useMemo(
+    () => getPublicProjects(studio.projects, isAdmin ? studio.hiddenCategories : []),
+    [isAdmin, studio.projects, studio.hiddenCategories],
+  );
+  const publicCategories = useMemo(
+    () => Array.from(new Set(publicProjects.map((project) => project.category))),
+    [publicProjects],
+  );
+  const approvedReviews = useMemo(
+    () => studio.reviews.filter((review) => review.status === 'approved'),
+    [studio.reviews],
+  );
 
   useEffect(() => {
-    let unsubs: any[] = [];
-    
-    const setupListeners = async () => {
-      unsubs.push(onSnapshot(collection(db, 'projects'), snap => {
-        if (!snap.empty) {
-          setProjects(snap.docs.map(d => ({ ...d.data(), id: d.id } as Project)));
-        } else if (isAdmin) {
-          // Bootstrap mode
-          handleUpdateProjects(projects); // push local default list
-        }
-      }));
-      unsubs.push(onSnapshot(collection(db, 'reviews'), snap => {
-        if (!snap.empty) {
-          setReviews(snap.docs.map(d => ({ ...d.data(), id: d.id } as Review)).sort((a,b)=> new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-        } else if (isAdmin) {
-          handleUpdateReviews(reviews);
-        }
-      }));
-      unsubs.push(onSnapshot(doc(db, 'metadata', 'categories'), snap => {
-        if (snap.exists() && snap.data().list) setCategories(snap.data().list);
-        else if (isAdmin) handleUpdateCategories(categories);
-      }));
-      unsubs.push(onSnapshot(doc(db, 'metadata', 'hiddenCategories'), snap => {
-        if (snap.exists() && snap.data().list) setHiddenCategories(snap.data().list);
-      }));
-      unsubs.push(onSnapshot(doc(db, 'metadata', 'craftsmen'), snap => {
-        if (snap.exists() && snap.data().profiles) setCraftsmenProfiles(snap.data().profiles);
-        else if (isAdmin) handleUpdateCraftsmenProfiles(craftsmenProfiles);
-      }));
-      unsubs.push(onSnapshot(doc(db, 'metadata', 'settings'), snap => {
-        if (snap.exists()) setStudioSettings(snap.data() as StudioSettings);
-        else if (isAdmin) handleUpdateSettings(studioSettings);
-      }));
-    };
-    
-    setupListeners();
-    
-    return () => {
-      unsubs.forEach(fn => fn && fn());
-    };
+    if (!isAdmin) setActiveEditContext(null);
   }, [isAdmin]);
 
-  // 5. Register user-submitted rating feedback
-  const handleAddReview = async (newRev: Omit<Review, 'id' | 'createdAt'>) => {
-    const reviewItem: Review = {
-      ...newRev,
-      id: `rev-${Date.now()}`,
-      createdAt: new Date().toISOString()
-    };
+  const persistProject = useCallback(async (project: Project): Promise<number> => {
+    const previous = studio.projects.find((item) => item.id === project.id);
+    await studio.saveProject(project);
+    return cleanRemovedAssets(previous?.imageAssets, project.imageAssets);
+  }, [studio.projects, studio.saveProject]);
 
-    // Optimistically update
-    setReviews([reviewItem, ...reviews]);
-    
-    // Create explicitly in Firestore to not overwrite others
+  const saveProject = useCallback(async (project: Project) => {
+    const cleanupFailures = await persistProject(project);
+    if (cleanupFailures > 0) {
+      setToast(`项目已保存，但有 ${cleanupFailures} 个旧图片对象清理失败，请检查 Storage。`);
+      window.setTimeout(() => setToast(null), 5000);
+    }
+  }, [persistProject]);
+
+  const deleteProject = useCallback(async (project: Project) => {
+    await studio.removeProject(project.id);
+    const cleanupFailures = await deleteAssets(project.imageAssets ?? []);
+    if (cleanupFailures > 0) {
+      setToast(`项目文档已删除，但有 ${cleanupFailures} 个图片对象清理失败，请检查 Storage。`);
+      window.setTimeout(() => setToast(null), 5000);
+    }
+  }, [studio.removeProject]);
+
+  const persistSettings = useCallback(async (settings: StudioSettings): Promise<number> => {
+    const previousAsset = studio.studioSettings.wechatQrAsset;
+    await studio.saveStudioSettings(settings);
+    if (previousAsset && previousAsset.path !== settings.wechatQrAsset?.path) {
+      return deleteAssets([previousAsset]);
+    }
+    return 0;
+  }, [studio.studioSettings, studio.saveStudioSettings]);
+
+  const saveSettings = useCallback(async (settings: StudioSettings) => {
+    const cleanupFailures = await persistSettings(settings);
+    if (cleanupFailures > 0) {
+      setToast('设置已保存，但旧二维码清理失败，请检查 Storage。');
+      window.setTimeout(() => setToast(null), 5000);
+    }
+  }, [persistSettings]);
+
+  const persistCraftsmen = useCallback(async (profiles: Record<string, CraftsmanProfile>): Promise<number> => {
+    const nextPaths = new Set(Object.values(profiles).map((profile) => profile.wechatQrAsset?.path).filter(Boolean));
+    const removedAssets = (Object.values(studio.craftsmenProfiles) as CraftsmanProfile[])
+      .map((profile) => profile.wechatQrAsset)
+      .filter((asset): asset is StoredImage => Boolean(asset && !nextPaths.has(asset.path)));
+    await studio.saveCraftsmenProfiles(profiles);
+    return deleteAssets(removedAssets);
+  }, [studio.craftsmenProfiles, studio.saveCraftsmenProfiles]);
+
+  const saveCraftsmen = useCallback(async (profiles: Record<string, CraftsmanProfile>) => {
+    const cleanupFailures = await persistCraftsmen(profiles);
+    if (cleanupFailures > 0) {
+      setToast(`成员资料已保存，但有 ${cleanupFailures} 个旧二维码清理失败，请检查 Storage。`);
+      window.setTimeout(() => setToast(null), 5000);
+    }
+  }, [persistCraftsmen]);
+
+  const replaceImage = useCallback(async (file: File, context: ImageEditContext) => {
+    setToast('图片上传中 0%');
+    let uploadedAsset: StoredImage | undefined;
+    let persisted = false;
+    let cleanupFailures = 0;
     try {
-      await setDoc(doc(db, 'reviews', String(reviewItem.id)), reviewItem);
-    } catch (e) { console.error(e); }
-  };
-
-  // Image editing updates using canvas base64 encoding from a Drag-and-drop or Paste file selection
-  const updateImageByContext = (dataUrl: string, context: ImageEditContext) => {
-    if (context.type === 'master-qr') {
-      const updated = { ...studioSettings, wechatQrUrl: dataUrl };
-      handleUpdateSettings(updated);
-    } else if (context.type === 'craftsman-qr' && context.craftsmanName) {
-      const updated = {
-        ...craftsmenProfiles,
-        [context.craftsmanName]: {
-          ...craftsmenProfiles[context.craftsmanName],
-          name: context.craftsmanName,
-          wechatQr: dataUrl
-        }
-      };
-      handleUpdateCraftsmenProfiles(updated);
-    } else if (context.projectId) {
-      const updatedProjects = projects.map(proj => {
-        if (proj.id !== context.projectId) return proj;
+      if (context.type === 'master-qr') {
+        const asset = await uploadPublicImage(file, { scope: 'settings', ownerId: 'studio', slot: 'wechat-qr' }, (progress) => setToast(`图片上传中 ${progress}%`));
+        uploadedAsset = asset;
+        cleanupFailures = await persistSettings({ ...studio.studioSettings, wechatQrUrl: asset.url, wechatQrAsset: asset });
+      } else if (context.type === 'craftsman-qr' && context.craftsmanName) {
+        const asset = await uploadPublicImage(file, { scope: 'craftsmen', ownerId: context.craftsmanName, slot: 'wechat-qr' }, (progress) => setToast(`图片上传中 ${progress}%`));
+        uploadedAsset = asset;
+        cleanupFailures = await persistCraftsmen({
+          ...studio.craftsmenProfiles,
+          [context.craftsmanName]: {
+            ...studio.craftsmenProfiles[context.craftsmanName],
+            name: context.craftsmanName,
+            wechatQr: asset.url,
+            wechatQrAsset: asset,
+          },
+        });
+      } else if (context.projectId) {
+        const existing = studio.projects.find((project) => project.id === context.projectId);
+        if (!existing) throw new Error('找不到要更新的项目。');
+        const asset = await uploadPublicImage(
+          file,
+          { scope: 'projects', ownerId: existing.id, slot: `${context.type}-${context.roomId ?? 'root'}-${context.imageIndex ?? 'cover'}` },
+          (progress) => setToast(`图片上传中 ${progress}%`),
+        );
+        uploadedAsset = asset;
+        const updated = structuredClone(existing);
+        updated.imageAssets = [...(updated.imageAssets ?? []), asset];
         if (context.type === 'project-cover') {
-          return { ...proj, coverUrl: dataUrl };
+          updated.coverUrl = asset.url;
         } else if (context.type === 'project-image' && context.imageIndex !== undefined) {
-          const newImages = [...proj.images];
-          newImages[context.imageIndex] = dataUrl;
-          return { ...proj, images: newImages };
-        } else if (context.type === 'room-cover' && context.roomId) {
-          const newRooms = (proj.rooms || []).map(r => {
-            if (r.id === context.roomId) {
-              return { ...r, coverUrl: dataUrl };
-            }
-            return r;
-          });
-          return { ...proj, rooms: newRooms };
-        } else if (context.type === 'room-image' && context.roomId && context.imageIndex !== undefined) {
-          const newRooms = (proj.rooms || []).map(r => {
-            if (r.id === context.roomId) {
-              const newRmImages = [...r.images];
-              newRmImages[context.imageIndex] = dataUrl;
-              return { ...r, images: newRmImages };
-            }
-            return r;
-          });
-          return { ...proj, rooms: newRooms };
+          if (!updated.images[context.imageIndex]) throw new Error('找不到要替换的作品图片。');
+          updated.images[context.imageIndex] = asset.url;
+        } else if (context.roomId) {
+          const room = updated.rooms?.find((item) => item.id === context.roomId);
+          if (!room) throw new Error('找不到要替换的空间图片。');
+          if (context.type === 'room-cover') room.coverUrl = asset.url;
+          if (context.type === 'room-image' && context.imageIndex !== undefined) room.images[context.imageIndex] = asset.url;
         }
-        return proj;
-      });
-      handleUpdateProjects(updatedProjects);
+        cleanupFailures = await persistProject(retainReferencedAssets(updated));
+      } else {
+        throw new Error('图片替换目标无效。');
+      }
+      persisted = true;
+      setActiveEditContext(null);
+      setToast(cleanupFailures > 0
+        ? `图片已保存，但有 ${cleanupFailures} 个旧对象清理失败，请检查 Storage。`
+        : '图片已上传并保存。');
+    } catch (error) {
+      const rollbackFailures = uploadedAsset && !persisted ? await deleteAssets([uploadedAsset]) : 0;
+      const detail = error instanceof Error ? error.message : '未知错误。';
+      setToast(rollbackFailures > 0
+        ? `图片更新失败：${detail} 新上传对象也未能清理，请检查 Storage。`
+        : `图片更新失败：${detail}`);
+      throw error;
+    } finally {
+      window.setTimeout(() => setToast(null), 3500);
     }
-  };
+  }, [persistCraftsmen, persistProject, persistSettings, studio.craftsmenProfiles, studio.projects, studio.studioSettings]);
 
-  const processImageFile = async (file: File, context: ImageEditContext) => {
-    if (!file.type.startsWith('image/')) return;
-    try {
-      const dataUrl = await compressImage(file, 0.15); // Target ~150KB max
-      updateImageByContext(dataUrl, context);
-      setBlockAlert('✓ [图片更新成功] 已编录进作品储存库！');
-      setTimeout(() => setBlockAlert(null), 3000);
-    } catch (e) {
-      console.error(e);
-      setBlockAlert('❌ [图片更新失败] 处理出现问题。');
-      setTimeout(() => setBlockAlert(null), 3000);
-    }
-  };
-
-  // Protect tourist view from copy/download/drag-saving
-  useEffect(() => {
-    if (isAdmin) return;
-
-    const showWarningToast = (message: string) => {
-      setBlockAlert(message);
-      const timer = setTimeout(() => setBlockAlert(null), 3000);
-      return timer;
-    };
-
-    let toastTimer: any;
-
-    const handleContextMenu = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'IMG' || target.closest('picture') || target.closest('.no-copy')) {
-        e.preventDefault();
-        clearTimeout(toastTimer);
-        toastTimer = showWarningToast('🔒 [馆藏保全] 游客模式下禁止复制/下载杰作工艺图片及印信资料。');
-      }
-    };
-
-    const handleDragStart = (e: DragEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'IMG' || target.closest('.no-copy')) {
-        e.preventDefault();
-        clearTimeout(toastTimer);
-        toastTimer = showWarningToast('🔒 [馆藏保全] 馆藏图片为非卖展示，禁止拖动另存。');
-      }
-    };
-
-    const handleCopy = (e: ClipboardEvent) => {
-      const target = e.target as HTMLElement;
-      e.preventDefault();
-      clearTimeout(toastTimer);
-      toastTimer = showWarningToast('🔒 [内容保护] 馆藏文献及匠师个人信息已受数字水印保全。');
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Prevent common save keyboard combos (Ctrl+S, Command+S, etc.)
-      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
-        e.preventDefault();
-        clearTimeout(toastTimer);
-        toastTimer = showWarningToast('🔒 [馆藏保全] 本工坊馆陈材料禁止另存。');
-      }
-    };
-
-    document.addEventListener('contextmenu', handleContextMenu);
-    document.addEventListener('dragstart', handleDragStart);
-    document.addEventListener('copy', handleCopy);
-    document.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.removeEventListener('contextmenu', handleContextMenu);
-      document.removeEventListener('dragstart', handleDragStart);
-      document.removeEventListener('copy', handleCopy);
-      document.removeEventListener('keydown', handleKeyDown);
-      clearTimeout(toastTimer);
-    };
-  }, [isAdmin]);
-
-  // Global paste and drop listeners when logged in as administrator and having an active selected frame
   useEffect(() => {
     if (!isAdmin || !activeEditContext) return;
-
-    const handleGlobalPaste = (e: ClipboardEvent) => {
-      const clipboardData = e.clipboardData;
-      if (!clipboardData) return;
-      
-      const items = clipboardData.items;
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf('image') !== -1) {
-          const file = items[i].getAsFile();
-          if (file) {
-            e.preventDefault();
-            processImageFile(file, activeEditContext);
-            break;
-          }
-        }
+    const paste = (event: ClipboardEvent) => {
+      const item = Array.from(event.clipboardData?.items ?? []).find((candidate) => candidate.type.startsWith('image/'));
+      const file = item?.getAsFile();
+      if (file) {
+        event.preventDefault();
+        void replaceImage(file, activeEditContext).catch(() => undefined);
       }
     };
-
-    const handleGlobalDragOver = (e: DragEvent) => {
-      e.preventDefault(); // Required for drop to trigger
-    };
-
-    const handleGlobalDrop = (e: DragEvent) => {
-      const dataTransfer = e.dataTransfer;
-      if (!dataTransfer) return;
-
-      if (dataTransfer.files && dataTransfer.files.length > 0) {
-        e.preventDefault();
-        processImageFile(dataTransfer.files[0], activeEditContext);
+    const dragOver = (event: DragEvent) => event.preventDefault();
+    const drop = (event: DragEvent) => {
+      const file = event.dataTransfer?.files?.[0];
+      if (file) {
+        event.preventDefault();
+        void replaceImage(file, activeEditContext).catch(() => undefined);
       }
     };
-
-    window.addEventListener('paste', handleGlobalPaste);
-    window.addEventListener('dragover', handleGlobalDragOver);
-    window.addEventListener('drop', handleGlobalDrop);
-
+    window.addEventListener('paste', paste);
+    window.addEventListener('dragover', dragOver);
+    window.addEventListener('drop', drop);
     return () => {
-      window.removeEventListener('paste', handleGlobalPaste);
-      window.removeEventListener('dragover', handleGlobalDragOver);
-      window.removeEventListener('drop', handleGlobalDrop);
+      window.removeEventListener('paste', paste);
+      window.removeEventListener('dragover', dragOver);
+      window.removeEventListener('drop', drop);
     };
-  }, [isAdmin, activeEditContext, projects, craftsmenProfiles, studioSettings]);
+  }, [activeEditContext, isAdmin, replaceImage]);
 
-  const handleToggleAdminStatus = (status: boolean) => {
-    setIsAdmin(status);
-    if (status) {
-      sessionStorage.setItem('MINI_PORTFOLIO_IS_ADMIN', 'true');
-    } else {
-      sessionStorage.removeItem('MINI_PORTFOLIO_IS_ADMIN');
-      setActiveEditContext(null); // Reset highlighted frames
-    }
-  };
-
-  const pendingCount = reviews.length; // Display total reviews count
+  useEffect(() => {
+    if (isAdmin) return;
+    const preventImageSave = (event: MouseEvent | DragEvent) => {
+      const target = event.target as HTMLElement;
+      if (target.tagName === 'IMG') {
+        event.preventDefault();
+        setToast('作品图片仅供浏览，请尊重创作版权。');
+        window.setTimeout(() => setToast(null), 2500);
+      }
+    };
+    document.addEventListener('contextmenu', preventImageSave);
+    document.addEventListener('dragstart', preventImageSave);
+    return () => {
+      document.removeEventListener('contextmenu', preventImageSave);
+      document.removeEventListener('dragstart', preventImageSave);
+    };
+  }, [isAdmin]);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-gf-rice text-gf-wood font-sans selection:bg-gf-wood/20">
-      {/* Sidebar navigation */}
-      <Sidebar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        pendingCommissionsCount={pendingCount}
-      />
-
-      {/* Viewport render container */}
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} pendingCommissionsCount={isAdmin ? studio.reviews.filter((review) => review.status === 'pending').length : 0} />
       <div className="flex-1 h-screen relative bg-gf-rice">
         <AnimatePresence mode="wait">
-          {activeTab === 'gallery' && (
-            <motion.div
-              key="gallery"
-              initial={{ opacity: 0, scale: 0.90, filter: 'blur(10px)' }}
-              animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, scale: 0.95, filter: 'blur(5px)' }}
-              transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-              className="absolute inset-0 w-full h-full origin-center"
-            >
-              {/* 微弱纸质纹理覆盖层 Paper texture overlay */}
-              <div 
-                className="pointer-events-none absolute inset-0 z-50 opacity-[0.04] mix-blend-multiply"
-                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }}
-              />
-              <GalleryView 
-                projects={projects} 
-                categories={categories} 
-                hiddenCategories={hiddenCategories} 
-                isAdmin={isAdmin}
-                activeEditContext={activeEditContext}
-                setActiveEditContext={setActiveEditContext}
-                craftsmenProfiles={craftsmenProfiles}
-                onUpdateCraftsmenProfiles={handleUpdateCraftsmenProfiles}
-              />
-            </motion.div>
-          )}
-
-          {activeTab === 'wip' && (
-            <motion.div
-              key="wip"
-              initial={{ opacity: 0, x: 20, filter: 'blur(2px)' }}
-              animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, x: -20, filter: 'blur(2px)' }}
-              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-              className="absolute inset-0 w-full h-full"
-            >
-              <WIPTimeline projects={projects} />
-            </motion.div>
-          )}
-
-          {activeTab === 'commission' && (
-            <motion.div
-              key="commission"
-              initial={{ opacity: 0, y: 20, filter: 'blur(2px)' }}
-              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, y: -20, filter: 'blur(2px)' }}
-              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-              className="absolute inset-0 w-full h-full"
-            >
-              <CommissionForm 
-                onAddReview={handleAddReview} 
-                projects={projects} 
-                reviews={reviews} 
-                studioSettings={studioSettings}
-              />
-            </motion.div>
-          )}
-
-          {activeTab === 'admin' && (
-            <motion.div
-              key="admin"
-              initial={{ opacity: 0, scale: 0.99, filter: 'blur(2px)' }}
-              animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, scale: 0.99, filter: 'blur(2px)' }}
-              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-              className="absolute inset-0 w-full h-full"
-            >
-              <AdminDashboard
-                projects={projects}
-                reviews={reviews}
-                categories={categories}
-                hiddenCategories={hiddenCategories}
-                onUpdateProjects={handleUpdateProjects}
-                onUpdateReviews={handleUpdateReviews}
-                onUpdateCategories={handleUpdateCategories}
-                onUpdateHiddenCategories={handleUpdateHiddenCategories}
-                isAdmin={isAdmin}
-                onToggleAdminStatus={handleToggleAdminStatus}
-                studioSettings={studioSettings}
-                onUpdateSettings={handleUpdateSettings}
-                craftsmenProfiles={craftsmenProfiles}
-                onUpdateCraftsmenProfiles={handleUpdateCraftsmenProfiles}
-                activeEditContext={activeEditContext}
-                setActiveEditContext={setActiveEditContext}
-              />
-            </motion.div>
-          )}
+          {activeTab === 'gallery' && <motion.div key="gallery" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0"><GalleryView projects={publicProjects} categories={publicCategories} isAdmin={isAdmin} activeEditContext={activeEditContext} setActiveEditContext={setActiveEditContext} craftsmenProfiles={studio.craftsmenProfiles} onUpdateCraftsmenProfiles={saveCraftsmen} onUploadImage={replaceImage} /></motion.div>}
+          {activeTab === 'wip' && <motion.div key="wip" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0"><WIPTimeline projects={publicProjects} /></motion.div>}
+          {activeTab === 'commission' && <motion.div key="commission" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0"><CommissionForm onAddReview={studio.submitReview} projects={publicProjects} reviews={approvedReviews} studioSettings={studio.studioSettings} /></motion.div>}
+          {activeTab === 'admin' && <motion.div key="admin" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0"><AdminDashboard projects={studio.projects} reviews={studio.reviews} categories={studio.categories} hiddenCategories={studio.hiddenCategories} isAdmin={isAdmin} authState={authState} studioSettings={studio.studioSettings} onLogin={login} onLogout={logout} onSaveProject={saveProject} onDeleteProject={deleteProject} onModerateReview={studio.moderateReview} onDeleteReview={studio.removeReview} onAddCategory={studio.addCategory} onRenameCategory={studio.renameCategory} onDeleteCategory={studio.deleteCategory} onCategoryVisibilityChange={studio.updateCategoryVisibility} onSaveSettings={saveSettings} onUploadAsset={uploadPublicImage} /></motion.div>}
         </AnimatePresence>
       </div>
 
-      {/* Floating Banner warnings / confirmations */}
-      {blockAlert && (
-        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-[200] px-5 py-3 bg-stone-900 border border-gf-sand/40 text-gf-rice text-xs md:text-sm rounded shadow-2xl font-serif flex items-center justify-center gap-2">
-          {blockAlert}
-        </div>
-      )}
-
-      {/* Active editable frame highlighted toast */}
-      {isAdmin && activeEditContext && (
-        <div className="fixed bottom-6 right-6 z-[180] max-w-sm p-4 bg-gf-wood text-gf-rice border border-gf-sand text-xs rounded shadow-2xl font-serif space-y-1.5 animate-pulse">
-          <div className="flex justify-between items-center border-b border-gf-sand/20 pb-1.5">
-            <span className="font-bold text-gf-sand uppercase tracking-wider text-[10px] flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 bg-gf-sand rounded-full animate-ping"></span>
-              画布编辑中 Active Box
-            </span>
-            <button 
-              onClick={() => setActiveEditContext(null)}
-              className="text-[9px] uppercase tracking-wider text-gf-sand hover:underline cursor-pointer"
-            >
-              取消 [ESC]
-            </button>
-          </div>
-          <p className="text-[11px] leading-relaxed opacity-90 text-left">
-            当前已锁定一个可更替图片框。您可以直接将任意本地图片文件<strong>拖放至页面内</strong>，或者在系统剪贴板内复制图片后在此处按下键盘 <strong>Ctrl+V / Paste</strong> 即可瞬间完成数字更替。
-          </p>
-        </div>
-      )}
+      {studio.dataError && <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[220] px-4 py-2 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded shadow-lg">{studio.dataError}</div>}
+      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[220] px-5 py-3 bg-stone-900 border border-gf-sand/40 text-gf-rice text-xs rounded shadow-2xl">{toast}</div>}
+      {isAdmin && activeEditContext && <div className="fixed bottom-6 right-6 z-[180] max-w-sm p-4 bg-gf-wood text-gf-rice border border-gf-sand text-xs rounded shadow-2xl"><div className="flex justify-between gap-4"><strong className="text-gf-sand">图片目标已锁定</strong><button type="button" onClick={() => setActiveEditContext(null)} className="text-gf-sand underline">取消</button></div><p className="mt-2 leading-relaxed">将图片拖入页面，或按 Ctrl+V 粘贴。上传完成并写入 Firestore 后才会显示成功。</p></div>}
     </div>
   );
 }
-

@@ -24,14 +24,14 @@ export default function Sidebar({
           whileTap={{ scale: 0.95 }}
           className="w-12 h-12 bg-gf-rice flex items-center justify-center transition-colors duration-300 group-hover:bg-gf-sand rounded-sm premium-shadow"
         >
-          <span className="text-gf-wood font-serif font-black text-2xl transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:rotate-180">C</span>
+          <span className="text-gf-wood font-serif font-black text-2xl">知</span>
         </motion.div>
         <span className="text-[9px] uppercase tracking-widest font-mono text-gf-rice/60 mt-1">工作室</span>
       </div>
 
       {/* Decorative vertical lettering */}
       <div className="hidden md:block vertical-text text-[9px] uppercase tracking-[0.45em] font-light text-gf-rice/40 whitespace-nowrap font-serif italic">
-        创立于 MMXXIV
+        知行造境 ZHIXING STUDIO
       </div>
 
       {/* Primary Vertical Navigation and quick tabs */}
@@ -49,7 +49,7 @@ export default function Sidebar({
              <motion.div layoutId="active-indicator" className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gf-sand rounded-r-sm" transition={{ ease: [0.22, 1, 0.36, 1], duration: 0.4 }} />
           )}
           <Layers className={`w-5 h-5 mb-1 transition-transform duration-300 group-hover:scale-110 ${activeTab === 'gallery' ? 'text-gf-sand' : ''}`} />
-          <span className="text-[10px] tracking-wider font-light">展示艺廊</span>
+          <span className="text-[10px] tracking-wider font-light">作品</span>
         </motion.button>
 
         <motion.button
@@ -65,7 +65,7 @@ export default function Sidebar({
              <motion.div layoutId="active-indicator" className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gf-sand rounded-r-sm" transition={{ ease: [0.22, 1, 0.36, 1], duration: 0.4 }} />
           )}
           <Wrench className={`w-5 h-5 mb-1 transition-transform duration-300 group-hover:scale-110 ${activeTab === 'wip' ? 'text-gf-sand' : ''}`} />
-          <span className="text-[10px] tracking-wider font-light">研制进度</span>
+          <span className="text-[10px] tracking-wider font-light">进度</span>
         </motion.button>
 
         <motion.button
@@ -75,13 +75,13 @@ export default function Sidebar({
           className={`group flex flex-col items-center justify-center p-2 rounded transition-colors w-full cursor-pointer relative ${
             activeTab === 'commission' ? 'text-gf-rice font-medium' : 'text-gf-rice/50 hover:text-gf-rice/90'
           }`}
-          title="在线观众实时评论与评分系统"
+          title="访客评论与评分"
         >
            {activeTab === 'commission' && (
              <motion.div layoutId="active-indicator" className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gf-sand rounded-r-sm" transition={{ ease: [0.22, 1, 0.36, 1], duration: 0.4 }} />
           )}
           <Star className={`w-5 h-5 mb-1 transition-transform duration-300 group-hover:scale-110 ${activeTab === 'commission' ? 'text-gf-sand' : 'text-gf-sand/60'}`} />
-          <span className="text-[10px] tracking-wider font-light">实时打分</span>
+          <span className="text-[10px] tracking-wider font-light">评鉴</span>
         </motion.button>
 
         <div className="w-8 h-px bg-gf-rice/10 my-1"></div>
@@ -110,7 +110,7 @@ export default function Sidebar({
 
       {/* Bottom vertical tag */}
       <div className="hidden md:block vertical-text text-[9px] uppercase tracking-[0.45em] font-light text-gf-rice/40 whitespace-nowrap font-serif">
-        微型与微缩模型工艺
+        微缩建筑与场景制作
       </div>
     </aside>
   );

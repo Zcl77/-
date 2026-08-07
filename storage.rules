@@ -1,0 +1,29 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAdmin() {
+      return request.auth != null
+        && 'admin' in request.auth.token
+        && request.auth.token.admin == true;
+    }
+
+    function isAllowedImage() {
+      return request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType is string
+        && request.resource.contentType.matches('image/(jpeg|png|webp|gif|avif)');
+    }
+
+    match /public/{allPaths=**} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if isAdmin() && isAllowedImage();
+      allow delete: if isAdmin();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

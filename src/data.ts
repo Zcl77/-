@@ -3,6 +3,8 @@ import { Project, Review } from './types';
 export const INITIAL_PROJECTS: Project[] = [
   {
     id: 'qilou-yanduo',
+    visibility: 'public',
+    isDemo: true,
     title: '《骑楼·凝固的烟火》',
     scale: '1:12',
     category: '岭南市井烟火',
@@ -122,6 +124,8 @@ export const INITIAL_PROJECTS: Project[] = [
   },
   {
     id: 'shangbu-laojie',
+    visibility: 'public',
+    isDemo: true,
     title: '《百载商埠·海风旧影》',
     scale: '1:12',
     category: '西洋折衷主义',
@@ -134,7 +138,7 @@ export const INITIAL_PROJECTS: Project[] = [
     inspiration: '汕头小公园开埠区老骑楼',
     authors: ['邓政松', '黄铭涛', '夏小军'],
     completionPercent: 100,
-    description: '以中国唯一放射性网格骑楼街道——汕头小公园开埠区为骨骼，再现上世纪二十年代商业口岸繁荣风华的经典微缩场景。180厘米的中等体积完美陈列了外探欧式浮雕阳台。路灯采用高透树脂封装微型LED管，街角竖立极细手工仿红木电线杆，外挂手缠绝缘陶瓷绝缘子及精细线束，甚至连墙角破旧的月份牌广告纸、随风微卷的书信都经由火烧、做旧工艺展现岁月留痕。',
+    description: '以汕头小公园开埠区的放射性网格骑楼街道为参考，再现上世纪二十年代商业口岸风貌的演示微缩场景。180厘米的模型陈列外探欧式浮雕阳台。路灯采用高透树脂封装微型 LED 管，街角设置手工仿红木电线杆、绝缘子及线束，墙角月份牌广告纸和书信则以做旧工艺表现岁月痕迹。',
     coverUrl: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?q=80&w=1200',
     images: [
       'https://images.unsplash.com/photo-1513694203232-719a280e022f?q=80&w=1200',
@@ -158,6 +162,8 @@ export const INITIAL_PROJECTS: Project[] = [
   },
   {
     id: 'chaozhou-paifang',
+    visibility: 'public',
+    isDemo: true,
     title: '《古邑余晖·斑驳牌坊》',
     scale: '1:12',
     category: '古典金石微刻',
@@ -194,6 +200,8 @@ export const INITIAL_PROJECTS: Project[] = [
   },
   {
     id: 'hanjiang-liaoshe',
+    visibility: 'public',
+    isDemo: true,
     title: '《韩江渔火·水上茶寮》',
     scale: '1:12',
     category: '水上水乡生态',
@@ -230,40 +238,35 @@ export const INITIAL_PROJECTS: Project[] = [
   }
 ];
 
-export const PRESET_IMAGES = [
-  { url: 'https://images.unsplash.com/photo-1547989453-11e67ffb3885?q=80&w=600', label: '骑楼古坊暖光柔色外观' },
-  { url: 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?q=80&w=600', label: '工夫茶馆红泥微缩炭炉' },
-  { url: 'https://images.unsplash.com/photo-1505691938895-1758d7feb511?q=80&w=600', label: '绣阁闺房罗纱雕花木床' },
-  { url: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?q=80&w=600', label: '天窗书房纯宣线装线装书' },
-  { url: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?q=80&w=600', label: '后院天井竹柴灶头微焰' },
-  { url: 'https://images.unsplash.com/photo-1548625361-155deee223d5?q=80&w=600', label: '牌坊重栱显微石膏雕琢' },
-  { url: 'https://images.unsplash.com/photo-1478147427282-58a87a120781?q=80&w=600', label: '韩江透明慢浇环氧水波' },
-  { url: 'https://images.unsplash.com/photo-1508847154043-be12a26c86c5?q=80&w=600', label: '精制手编竹篾微缩蒸笼' }
-];
-
 export const INITIAL_REVIEWS: Review[] = [
   {
     id: 'rev-1',
-    reviewerName: '王翰林 (古建研究院专家)',
+    status: 'approved',
+    isDemo: true,
+    reviewerName: '演示访客 A',
     rating: 5,
     projectName: '《骑楼·凝固的烟火》',
-    comment: '细节繁复至极，手工温度极高！一楼茶肆里的红泥小火炉和迷你茶具，简直把潮汕工夫茶的气质神骨都做还原了。不愧是殿堂级的微缩重工之作。',
+    comment: '这是一条用于展示评论排版与评分功能的演示内容，不代表真实客户或专业机构评价。',
     createdAt: '2026-05-26T14:22:00Z'
   },
   {
     id: 'rev-2',
-    reviewerName: '林曼柔 (舞台美术导演)',
+    status: 'approved',
+    isDemo: true,
+    reviewerName: '演示访客 B',
     rating: 5,
     projectName: '《韩江渔火·水上茶寮》',
-    comment: '吊脚楼的支柱与透明环氧树脂水面的过渡如同梦境。呼吸灯效模拟的微温木炭不规则复燃，充满了戏剧情调，极具舞台风范！',
+    comment: '这是一条演示评论，用于确认项目名称、星级和正文在页面中的显示效果。',
     createdAt: '2026-05-27T09:12:00Z'
   },
   {
     id: 'rev-3',
-    reviewerName: '张老古 (明清收藏客)',
+    status: 'approved',
+    isDemo: true,
+    reviewerName: '演示访客 C',
     rating: 5,
     projectName: '工作室总体打分',
-    comment: '每一款微缩杰作都是非卖品，真的非常震撼！对于广角和微距的拿捏堪称绝活。支持我们本土的高水平微缩工匠。',
+    comment: '这是一条工作室总体评分的演示数据，不代表真实销售状态、客户反馈或商业成绩。',
     createdAt: '2026-05-27T12:05:00Z'
   }
 ];

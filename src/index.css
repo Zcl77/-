@@ -88,6 +88,22 @@
 }
 
 @layer utilities {
+  .field-label {
+    @apply text-[10px] uppercase tracking-widest text-gf-tea font-mono font-bold block;
+  }
+
+  .field-input {
+    @apply w-full bg-white border border-gf-tea/30 p-2.5 text-sm text-gf-wood rounded focus:border-gf-wood focus:outline-none;
+  }
+
+  .section-title {
+    @apply text-xs uppercase tracking-widest text-gf-wood font-mono font-bold;
+  }
+
+  .small-action {
+    @apply px-3 py-1.5 border border-gf-tea/25 bg-white text-gf-wood rounded text-xs inline-flex items-center gap-1;
+  }
+
   .vertical-text {
     writing-mode: vertical-rl;
     text-orientation: mixed;
