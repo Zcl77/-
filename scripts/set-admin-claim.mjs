@@ -18,7 +18,8 @@ const user = await adminAuth.getUser(uid);
 const currentClaims = user.customClaims ?? {};
 
 if (revoke) {
-  const { admin: _admin, ...remainingClaims } = currentClaims;
+  const remainingClaims = { ...currentClaims };
+  delete remainingClaims.admin;
   await adminAuth.setCustomUserClaims(uid, remainingClaims);
   console.log(`已移除 ${uid} 的 admin Claim。`);
 } else {

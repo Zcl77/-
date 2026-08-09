@@ -8,12 +8,14 @@ interface SidebarProps {
   pendingCommissionsCount: number;
 }
 
-const ITEMS: Array<{ id: AppTab; label: string; title: string; icon: typeof Images }> = [
+const PRIMARY_ITEMS: Array<{ id: Exclude<AppTab, 'admin'>; label: string; title: string; icon: typeof Images }> = [
   { id: 'gallery', label: '作品', title: '作品展厅', icon: Images },
-  { id: 'wip', label: '进度', title: '制作进度', icon: Waypoints },
-  { id: 'commission', label: '评鉴', title: '评论与联系', icon: MessageSquareText },
-  { id: 'admin', label: '后台', title: '管理后台', icon: Settings2 },
+  { id: 'wip', label: '制作日志', title: '公开制作日志', icon: Waypoints },
+  { id: 'commission', label: '联系', title: '评论与联系', icon: MessageSquareText },
 ];
+
+const ADMIN_ITEM = { id: 'admin' as const, label: '管理', title: '管理后台', icon: Settings2 };
+const ALL_ITEMS = [...PRIMARY_ITEMS, ADMIN_ITEM];
 
 function BrandButton({ onClick, compact = false }: { onClick: () => void; compact?: boolean }) {
   return (
@@ -34,7 +36,7 @@ export default function Sidebar({ activeTab, setActiveTab, pendingCommissionsCou
         <BrandButton onClick={() => setActiveTab('gallery')} />
 
         <nav className="my-auto flex w-full flex-col gap-2" aria-label="主要导航">
-          {ITEMS.map(({ id, label, title, icon: Icon }) => {
+          {PRIMARY_ITEMS.map(({ id, label, title, icon: Icon }) => {
             const active = activeTab === id;
             return (
               <button
@@ -47,26 +49,53 @@ export default function Sidebar({ activeTab, setActiveTab, pendingCommissionsCou
               >
                 <Icon className={`h-4 w-4 ${active ? 'text-studio-brass' : ''}`} aria-hidden="true" />
                 <span>{label}</span>
-                {id === 'admin' && pendingCommissionsCount > 0 && (
-                  <span className="absolute right-2 top-2 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-studio-warning px-1 text-[9px] font-bold text-studio-canvas" aria-label={`${pendingCommissionsCount} 条待审核评论`}>
-                    {pendingCommissionsCount}
-                  </span>
-                )}
               </button>
             );
           })}
         </nav>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('admin')}
+          aria-current={activeTab === 'admin' ? 'page' : undefined}
+          className={`relative mb-5 flex h-10 w-10 items-center justify-center rounded-[4px] border transition-colors ${activeTab === 'admin' ? 'border-studio-brass bg-studio-raised text-studio-brass' : 'border-studio-line text-studio-muted hover:bg-studio-raised hover:text-studio-ink'}`}
+          title="打开管理后台"
+          aria-label="打开管理后台"
+        >
+          <Settings2 className="h-4 w-4" aria-hidden="true" />
+          {pendingCommissionsCount > 0 && (
+            <span className="absolute -right-1 -top-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-studio-warning px-1 text-[9px] font-bold text-studio-canvas" aria-label={`${pendingCommissionsCount} 条待审核评论`}>
+              {pendingCommissionsCount}
+            </span>
+          )}
+        </button>
 
         <p className="text-center text-[9px] leading-4 text-studio-faint">微缩建筑<br />与场景制作</p>
       </aside>
 
       <header className="fixed inset-x-0 top-0 z-50 flex h-14 items-center justify-between border-b border-studio-line bg-studio-surface px-4 lg:hidden">
         <BrandButton compact onClick={() => setActiveTab('gallery')} />
-        <span className="text-[10px] text-studio-faint">{ITEMS.find((item) => item.id === activeTab)?.title}</span>
+        <div className="flex items-center gap-2">
+          <span className="hidden text-[10px] text-studio-faint xs:block">{ALL_ITEMS.find((item) => item.id === activeTab)?.title}</span>
+          <button
+            type="button"
+            onClick={() => setActiveTab('admin')}
+            className={`icon-button relative h-9 min-h-9 w-9 ${activeTab === 'admin' ? 'border-studio-brass text-studio-brass' : ''}`}
+            title="打开管理后台"
+            aria-label="打开管理后台"
+          >
+            <Settings2 className="h-4 w-4" aria-hidden="true" />
+            {pendingCommissionsCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-studio-warning px-1 text-[9px] font-bold text-studio-canvas">
+                {pendingCommissionsCount}
+              </span>
+            )}
+          </button>
+        </div>
       </header>
 
-      <nav className="fixed inset-x-0 bottom-0 z-50 grid h-[4.5rem] grid-cols-4 border-t border-studio-line bg-studio-surface px-2 pb-[env(safe-area-inset-bottom)] lg:hidden" aria-label="移动端主要导航">
-        {ITEMS.map(({ id, label, title, icon: Icon }) => {
+      <nav className="fixed inset-x-0 bottom-0 z-50 grid h-[4.5rem] grid-cols-3 border-t border-studio-line bg-studio-surface px-2 pb-[env(safe-area-inset-bottom)] lg:hidden" aria-label="移动端主要导航">
+        {PRIMARY_ITEMS.map(({ id, label, title, icon: Icon }) => {
           const active = activeTab === id;
           return (
             <button
@@ -79,11 +108,6 @@ export default function Sidebar({ activeTab, setActiveTab, pendingCommissionsCou
             >
               <Icon className={`h-4 w-4 ${active ? 'text-studio-brass' : ''}`} aria-hidden="true" />
               <span>{label}</span>
-              {id === 'admin' && pendingCommissionsCount > 0 && (
-                <span className="absolute right-[24%] top-2.5 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-studio-warning px-1 text-[9px] font-bold text-studio-canvas">
-                  {pendingCommissionsCount}
-                </span>
-              )}
             </button>
           );
         })}

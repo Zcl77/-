@@ -1,14 +1,14 @@
 # 知行造境 / Zhixing Studio
 
-知行造境官方网站与客户项目管理系统的早期原型。当前仓库保留作品展厅、制作进度、评论与后台管理等既有功能，并完成了第一阶段的权限、数据与工程基础加固。
+知行造境官方网站与未来客户项目管理系统的前端原型。当前仓库保留作品展厅、公开制作日志、评论与后台管理等既有功能，并完成了权限、数据状态和工程基础加固。
 
 仓库中的预置作品和评论仅用于演示界面，前台与后台均标记为“演示内容”，不代表真实客户、评价、销售或商业成绩。
 
 ## 技术栈
 
 - React 19、TypeScript、Vite 6、Tailwind CSS 4
-- Firebase Authentication、Cloud Firestore、Cloud Storage
-- Vitest、Firebase Local Emulator Suite
+- 可切换的数据适配器：本地 Mock 或 Firebase Authentication、Cloud Firestore、Cloud Storage
+- ESLint、Prettier、Vitest、Firebase Local Emulator Suite
 
 ## 目录
 
@@ -18,11 +18,12 @@ src/
   components/admin/    后台项目、评论、分类和设置模块
   components/gallery/  展厅子组件
   domain/              纯校验与可见性逻辑
-  hooks/               认证和实时数据状态
+  hooks/               认证和数据状态
+  services/backend/    UI 使用的数据契约、Mock 与 Firebase 适配器
   services/firebase/   Firebase repository/service 层
 scripts/               管理员 Claim 与数据迁移脚本
 tests/                 逻辑测试和 Firebase Rules 测试
-docs/                  Firebase 配置与迁移操作文档
+docs/                  架构、审计、Firebase 与后端迁移文档
 ```
 
 ## 环境要求
@@ -41,11 +42,13 @@ docs/                  Firebase 配置与迁移操作文档
    npm ci
    ```
 
-2. 从示例创建本地环境变量文件，并填入 Firebase Web App 的公开客户端配置：
+2. 从示例创建本地环境变量文件：
 
    ```bash
    cp .env.example .env.local
    ```
+
+   本地 UI 开发使用 `VITE_DATA_PROVIDER=mock`，无需 Firebase 账号或配置。只有需要联调现有 Firebase 数据时，才改为 `firebase` 并填写 Firebase Web App 的公开客户端配置。
 
 3. 启动开发服务器：
 
@@ -57,15 +60,28 @@ docs/                  Firebase 配置与迁移操作文档
 
 `.env.local` 已被 Git 忽略。不要在其中放置 Admin SDK 私钥，也不要提交服务账号 JSON、访问令牌或真实管理员 UID。
 
+若 Windows 同时安装过独立 Node.js 和 nvm，先运行 `where.exe node`、`where.exe npm`、`node -v` 与 `npm -v`。PATH 中只保留准备使用的一套 Node.js，随后重启编辑器终端，再执行 `npm ci`。
+
+## 数据源模式
+
+| `VITE_DATA_PROVIDER` | 用途 | 行为 |
+| --- | --- | --- |
+| `mock` | 本地前端开发 | 显式加载仓库内标记为演示内容的数据；不连接 Google 服务，写入只保留在当前浏览器会话。 |
+| `firebase` | 现有线上数据联调 | 使用 Firebase Auth、Firestore 和 Storage；缺少配置时显示明确错误，不会静默伪装成空数据。 |
+
+开发构建默认使用 `mock`，生产构建默认使用 `firebase`。生产部署必须显式设置并校验环境变量。UI 只依赖 `src/services/backend/` 的接口，未来 REST API 通过新增适配器接入。
+
 ## 常用命令
 
 ```bash
 npm run dev          # 本地开发
+npm run lint         # ESLint
 npm run typecheck    # TypeScript 检查
 npm test             # 纯逻辑测试
 npm run test:rules   # Firestore + Storage Rules 模拟器测试
 npm run build        # 生产构建
-npm run check        # 类型、逻辑测试和构建
+npm run format       # 按 Prettier 配置格式化
+npm run check        # Lint、类型、逻辑测试和构建
 ```
 
 ## Firebase 配置
@@ -126,7 +142,7 @@ npm run migrate:data -- --apply
 - Storage 只允许管理员写入 `public/`，并限制为 JPEG、PNG、WebP、GIF、AVIF 且不超过 10 MB。
 - 所有其他 Firestore 文档与 Storage 路径默认拒绝。
 
-当前直接写入 Firestore 的评论入口没有可靠的服务端频率限制或验证码。`ReviewSubmissionGateway` 已集中为单一扩展入口，后续应替换为验证 App Check/验证码并执行速率限制的 HTTPS Callable Function；在完成前不要宣称具备服务端防刷能力。
+当前直接写入 Firestore 的评论入口没有可靠的服务端频率限制或验证码。评论提交已集中到后端适配器接口；后续 REST API 应在服务端增加速率限制和验证码验证。在完成前不能宣称具备服务端防刷能力。
 
 ## 部署
 
@@ -134,6 +150,7 @@ npm run migrate:data -- --apply
 
 ```bash
 npm run typecheck
+npm run lint
 npm test
 npm run build
 npm run test:rules
@@ -144,7 +161,15 @@ npx firebase deploy --project your-project-id --only firestore:rules,storage
 
 ## 持续集成
 
-`.github/workflows/quality.yml` 会在 Pull Request 和 `main` 推送时使用 Node.js 22 与 Java 21 执行安装、类型检查、测试、构建和 Rules 验证。
+`.github/workflows/quality.yml` 会在 Pull Request 和 `main` 推送时使用 Node.js 22 与 Java 21 执行安装、Lint、类型检查、测试、构建和 Rules 验证。
+
+## 设计与迁移文档
+
+- [当前架构与 Google 服务依赖](docs/CURRENT_ARCHITECTURE.md)
+- [前端 P0/P1/P2 审计](docs/FRONTEND_AUDIT.md)
+- [Codex 与 PyCharm 工作方式](docs/CODEX_PYCHARM.md)
+- [自建 Python 后端方案](docs/PYTHON_BACKEND_PLAN.md)
+- [Firebase 配置](docs/FIREBASE_SETUP.md) 与 [数据迁移](docs/DATA_MIGRATION.md)
 
 ## 已知限制
 

@@ -41,7 +41,8 @@ function normalizeProject(id: string, value: Partial<Project>): Project {
 }
 
 function toProjectDocument(project: Project): Omit<Project, 'id'> {
-  const { id: _id, ...document } = project;
+  const { id, ...document } = project;
+  void id;
   return document;
 }
 

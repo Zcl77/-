@@ -1,14 +1,16 @@
 import { LogIn } from 'lucide-react';
-import { AdminAuthSnapshot } from '../../services/firebase/authRepository';
+import { AdminAuthSnapshot } from '../../services/backend';
 import StatusNotice from '../ui/StatusNotice';
 
 interface AdminLoginProps {
   authState: AdminAuthSnapshot;
+  dataSourceLabel: string;
   onLogin: () => Promise<void>;
 }
 
-export default function AdminLogin({ authState, onLogin }: AdminLoginProps) {
+export default function AdminLogin({ authState, dataSourceLabel, onLogin }: AdminLoginProps) {
   const busy = authState.status === 'checking' || authState.status === 'signing-in';
+  const unavailable = authState.status === 'unavailable';
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-studio-canvas p-4 md:p-8">
@@ -23,18 +25,22 @@ export default function AdminLogin({ authState, onLogin }: AdminLoginProps) {
           <StatusNotice compact tone="error" title="身份验证失败" description={authState.message ?? '当前账号没有管理员权限。'} className="mt-5" />
         )}
 
+        {unavailable && (
+          <StatusNotice compact title="当前为本地演示模式" description={authState.message} className="mt-5" />
+        )}
+
         <p className="mt-5 text-center text-xs leading-6 text-studio-muted">
-          Google 登录仅用于验证身份。只有 ID Token 含 <code className="font-mono text-studio-ink">admin: true</code> Claim 的账号可以进入。
+          当前数据源：{dataSourceLabel}。生产后台必须由服务端验证身份和管理员权限，前端状态不能自行授权。
         </p>
 
         <button
           type="button"
           onClick={() => void onLogin()}
-          disabled={busy}
+          disabled={busy || unavailable}
           className="button-primary mt-6 w-full"
         >
           <LogIn className="h-4 w-4" />
-          {authState.status === 'checking' ? '正在检查登录状态' : authState.status === 'signing-in' ? '正在验证管理员权限' : '使用 Google 登录'}
+          {unavailable ? '当前数据源不提供登录' : authState.status === 'checking' ? '正在检查登录状态' : authState.status === 'signing-in' ? '正在验证管理员权限' : '管理员登录'}
         </button>
       </div>
     </div>
