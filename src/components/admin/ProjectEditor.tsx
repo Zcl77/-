@@ -4,6 +4,7 @@ import { Project, RoomDetail, StoredImage, WorkStep } from '../../types';
 import { createUniqueId, validateProject } from '../../domain/validation';
 import { applyProjectVisibility, retainReferencedAssets } from '../../domain/visibility';
 import { UploadDestination } from '../../services/firebase/storageRepository';
+import StatusNotice from '../ui/StatusNotice';
 
 interface ProjectEditorProps {
   project: Project;
@@ -78,22 +79,22 @@ function ImageField({ label, value, progress, message, onChange, onUpload }: Ima
 
   return (
     <div className="space-y-2" onPaste={handlePaste} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop}>
-      <label className="text-[10px] uppercase tracking-widest text-gf-tea font-mono font-bold">{label}</label>
-      <div className="flex flex-col sm:flex-row gap-2 items-stretch">
-        <input value={value} onChange={(event) => onChange(event.target.value)} placeholder="https://... 或旧 Base64 数据" className="flex-1 border border-gf-tea/30 p-2 text-xs font-mono rounded min-w-0" />
-        <label className="px-3 py-2 bg-gf-wood text-gf-rice rounded text-xs flex items-center justify-center gap-1.5 cursor-pointer shrink-0">
-          <Upload className="w-3.5 h-3.5" /> 上传
+      <label className="field-label">{label}</label>
+      <div className="flex flex-col items-stretch gap-2 sm:flex-row">
+        <input value={value} onChange={(event) => onChange(event.target.value)} placeholder="https://... 或旧 Base64 数据" className="field-input min-w-0 flex-1 font-mono text-xs" />
+        <label className="button-secondary shrink-0 cursor-pointer">
+          <Upload className="h-3.5 w-3.5" /> 上传
           <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" className="hidden" onChange={(event) => {
             acceptFile(event.target.files?.[0]);
             event.currentTarget.value = '';
           }} />
         </label>
-        <div className="w-20 h-14 border border-gf-tea/20 bg-white rounded overflow-hidden flex items-center justify-center shrink-0">
-          {value ? <img src={value} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <ImageIcon className="w-5 h-5 text-gf-tea/50" />}
+        <div className="flex h-14 w-20 shrink-0 items-center justify-center overflow-hidden rounded-[4px] border border-studio-line bg-black">
+          {value ? <img src={value} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" loading="lazy" decoding="async" /> : <ImageIcon className="h-5 w-5 text-studio-faint" />}
         </div>
       </div>
-      {progress !== undefined && <p className="text-[10px] text-gf-tea">上传中 {progress}%</p>}
-      {message && <p className="text-[10px] text-gf-tea">{message}</p>}
+      {progress !== undefined && <div role="status" className="text-[10px] text-studio-muted">上传中 {progress}%</div>}
+      {message && <p className="text-[10px] text-studio-muted">{message}</p>}
     </div>
   );
 }
@@ -183,17 +184,17 @@ export default function ProjectEditor({ project, categories, hiddenCategories, o
   };
 
   return (
-    <form onSubmit={submit} className="max-w-5xl bg-white/85 border border-gf-tea/20 p-6 md:p-8 rounded space-y-7 shadow-md text-left">
-      <div className="flex justify-between items-start gap-4 border-b border-gf-tea/15 pb-4">
+    <form onSubmit={submit} className="max-w-6xl space-y-8 text-left">
+      <div className="flex items-start justify-between gap-4 border-b border-studio-line pb-5">
         <div>
-          <h2 className="text-xl font-serif font-bold">{project.title ? '编辑项目' : '新建项目'}</h2>
-          <p className="text-[10px] text-gf-tea font-mono mt-1">稳定 ID：{draft.id}</p>
+          <h2 className="section-heading">{project.title ? '编辑项目' : '新建项目'}</h2>
+          <p className="mt-1 font-mono text-[10px] text-studio-faint">稳定 ID：{draft.id}</p>
         </div>
-        <button type="button" onClick={onCancel} className="p-2 border border-gf-tea/20 rounded" title="取消"><X className="w-4 h-4" /></button>
+        <button type="button" onClick={onCancel} className="icon-button" title="取消编辑" aria-label="取消编辑"><X className="h-4 w-4" /></button>
       </div>
 
-      {message && <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded">{message}</div>}
-      {draft.isDemo && <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded">该项目来自早期演示数据，前台会明确显示“演示内容”。</div>}
+      {message && <StatusNotice compact tone="error" title="项目尚未保存" description={message} />}
+      {draft.isDemo && <StatusNotice compact tone="warning" title="演示项目" description="该项目来自早期演示数据，前台会明确显示“演示内容”。" />}
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <label className="space-y-1.5"><span className="field-label">项目名称 *</span><input required maxLength={200} value={draft.title} onChange={(event) => update('title', event.target.value)} className="field-input" /></label>
@@ -209,14 +210,14 @@ export default function ProjectEditor({ project, categories, hiddenCategories, o
           }} className="field-input">{categories.map((category) => <option key={category}>{category}</option>)}</select></label>
         </div>
         <label className="space-y-1.5"><span className="field-label">状态</span><select value={draft.status} onChange={(event) => update('status', event.target.value as Project['status'])} className="field-input"><option value="WIP">制作中</option><option value="Completed">已完成</option><option value="Sold">已售出</option></select></label>
-        <label className="space-y-1.5"><span className="field-label">项目可见性</span><select value={draft.visibility} disabled={hiddenCategories.includes(draft.category)} onChange={(event) => update('visibility', event.target.value as Project['visibility'])} className="field-input disabled:opacity-60"><option value="public">公开</option><option value="hidden">隐藏</option></select>{hiddenCategories.includes(draft.category) && <span className="block text-[10px] text-gf-tea">该分类已隐藏，项目必须保持隐藏。</span>}</label>
+        <label className="space-y-1.5"><span className="field-label">项目可见性</span><select value={draft.visibility} disabled={hiddenCategories.includes(draft.category)} onChange={(event) => update('visibility', event.target.value as Project['visibility'])} className="field-input disabled:opacity-60"><option value="public">公开</option><option value="hidden">隐藏</option></select>{hiddenCategories.includes(draft.category) && <span className="block text-[10px] text-studio-warning">该分类已隐藏，项目必须保持隐藏。</span>}</label>
         <div className="grid grid-cols-2 gap-3">
           <label className="space-y-1.5"><span className="field-label">累计工时</span><input type="number" min="0" value={draft.timeSpent} onChange={(event) => update('timeSpent', Number(event.target.value))} className="field-input" /></label>
           <label className="space-y-1.5"><span className="field-label">完成比例</span><input type="number" min="0" max="100" value={draft.completionPercent} onChange={(event) => update('completionPercent', Number(event.target.value))} className="field-input" /></label>
         </div>
       </section>
 
-      <label className="block space-y-1.5"><span className="field-label">项目说明 *</span><textarea required maxLength={5000} rows={5} value={draft.description} onChange={(event) => update('description', event.target.value)} className="field-input" /></label>
+      <label className="block space-y-1.5"><span className="field-label">项目说明 *</span><textarea required maxLength={5000} rows={5} value={draft.description} onChange={(event) => update('description', event.target.value)} className="field-input resize-y" /></label>
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <label className="space-y-1.5"><span className="field-label">尺寸</span><input value={draft.dimensions ?? ''} onChange={(event) => update('dimensions', event.target.value)} className="field-input" /></label>
@@ -226,44 +227,44 @@ export default function ProjectEditor({ project, categories, hiddenCategories, o
         <label className="space-y-1.5 md:col-span-2"><span className="field-label">参与成员（逗号分隔）</span><input value={authors} onChange={(event) => setAuthors(event.target.value)} className="field-input" /></label>
       </section>
 
-      <section className="space-y-4 border-t border-gf-tea/15 pt-5">
+      <section className="space-y-4 border-t border-studio-line pt-6">
         <h3 className="section-title">图片</h3>
         <ImageField label="封面图" value={draft.coverUrl} progress={uploads.cover?.progress} message={uploads.cover?.message} onChange={(value) => update('coverUrl', value)} onUpload={(file) => void upload(file, 'cover', (url) => update('coverUrl', url))} />
         {draft.images.map((value, index) => {
           const slot = `gallery-${index}`;
-          return <div key={index} className="flex gap-2 items-end"><div className="flex-1"><ImageField label={`作品图片 ${index + 1}`} value={value} progress={uploads[slot]?.progress} message={uploads[slot]?.message} onChange={(url) => { const next = [...draft.images]; next[index] = url; update('images', next); }} onUpload={(file) => void upload(file, slot, (url) => { const next = [...draft.images]; next[index] = url; update('images', next); })} /></div><button type="button" onClick={() => update('images', draft.images.filter((_, itemIndex) => itemIndex !== index))} className="p-2 text-red-700" title="删除图片"><Trash2 className="w-4 h-4" /></button></div>;
+          return <div key={index} className="flex items-end gap-2"><div className="flex-1"><ImageField label={`作品图片 ${index + 1}`} value={value} progress={uploads[slot]?.progress} message={uploads[slot]?.message} onChange={(url) => { const next = [...draft.images]; next[index] = url; update('images', next); }} onUpload={(file) => void upload(file, slot, (url) => { const next = [...draft.images]; next[index] = url; update('images', next); })} /></div><button type="button" onClick={() => update('images', draft.images.filter((_, itemIndex) => itemIndex !== index))} className="icon-button mb-0.5 h-10 min-h-10 w-10 text-studio-danger" title="删除图片"><Trash2 className="h-4 w-4" /></button></div>;
         })}
         <button type="button" onClick={() => update('images', [...draft.images, ''])} className="small-action"><Plus className="w-3.5 h-3.5" /> 添加作品图片</button>
       </section>
 
-      <section className="space-y-4 border-t border-gf-tea/15 pt-5">
+      <section className="space-y-4 border-t border-studio-line pt-6">
         <div className="flex justify-between items-center"><h3 className="section-title">空间与房间细节</h3><button type="button" onClick={() => update('rooms', [...(draft.rooms ?? []), { id: createUniqueId(), name: '', coverUrl: '', images: [], description: '', detailsList: [] }])} className="small-action"><Plus className="w-3.5 h-3.5" /> 添加空间</button></div>
         {(draft.rooms ?? []).map((room, roomIndex) => (
-          <div key={room.id} className="p-4 border border-gf-tea/15 bg-gf-rice/20 rounded space-y-4">
-            <div className="flex justify-between"><span className="text-xs font-bold">空间 {roomIndex + 1}</span><button type="button" onClick={() => update('rooms', draft.rooms?.filter((_, index) => index !== roomIndex))} className="text-red-700" title="删除空间"><Trash2 className="w-4 h-4" /></button></div>
+          <div key={room.id} className="ui-panel-muted space-y-4 p-4">
+            <div className="flex justify-between"><span className="text-xs font-bold text-studio-ink">空间 {roomIndex + 1}</span><button type="button" onClick={() => update('rooms', draft.rooms?.filter((_, index) => index !== roomIndex))} className="text-studio-danger" title="删除空间"><Trash2 className="h-4 w-4" /></button></div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3"><input required placeholder="空间名称" value={room.name} onChange={(event) => updateRoom(roomIndex, (current) => ({ ...current, name: event.target.value }))} className="field-input" /><textarea required placeholder="空间说明" value={room.description} onChange={(event) => updateRoom(roomIndex, (current) => ({ ...current, description: event.target.value }))} className="field-input" /></div>
             <ImageField label="空间封面" value={room.coverUrl} progress={uploads[`room-${room.id}-cover`]?.progress} message={uploads[`room-${room.id}-cover`]?.message} onChange={(url) => updateRoom(roomIndex, (current) => ({ ...current, coverUrl: url }))} onUpload={(file) => void upload(file, `room-${room.id}-cover`, (url) => updateRoom(roomIndex, (current) => ({ ...current, coverUrl: url })))} />
             <textarea rows={3} placeholder="细节清单，每行一项" value={room.detailsList?.join('\n') ?? ''} onChange={(event) => updateRoom(roomIndex, (current) => ({ ...current, detailsList: event.target.value.split('\n') }))} className="field-input" />
             {room.images.map((url, imageIndex) => {
               const slot = `room-${room.id}-image-${imageIndex}`;
-              return <div key={imageIndex} className="flex gap-2 items-end"><div className="flex-1"><ImageField label={`空间图片 ${imageIndex + 1}`} value={url} progress={uploads[slot]?.progress} message={uploads[slot]?.message} onChange={(value) => updateRoom(roomIndex, (current) => ({ ...current, images: current.images.map((item, index) => index === imageIndex ? value : item) }))} onUpload={(file) => void upload(file, slot, (value) => updateRoom(roomIndex, (current) => ({ ...current, images: current.images.map((item, index) => index === imageIndex ? value : item) })))} /></div><button type="button" onClick={() => updateRoom(roomIndex, (current) => ({ ...current, images: current.images.filter((_, index) => index !== imageIndex) }))} className="p-2 text-red-700" title="删除空间图片"><Trash2 className="w-4 h-4" /></button></div>;
+              return <div key={imageIndex} className="flex items-end gap-2"><div className="flex-1"><ImageField label={`空间图片 ${imageIndex + 1}`} value={url} progress={uploads[slot]?.progress} message={uploads[slot]?.message} onChange={(value) => updateRoom(roomIndex, (current) => ({ ...current, images: current.images.map((item, index) => index === imageIndex ? value : item) }))} onUpload={(file) => void upload(file, slot, (value) => updateRoom(roomIndex, (current) => ({ ...current, images: current.images.map((item, index) => index === imageIndex ? value : item) })))} /></div><button type="button" onClick={() => updateRoom(roomIndex, (current) => ({ ...current, images: current.images.filter((_, index) => index !== imageIndex) }))} className="icon-button mb-0.5 h-10 min-h-10 w-10 text-studio-danger" title="删除空间图片"><Trash2 className="h-4 w-4" /></button></div>;
             })}
             <button type="button" onClick={() => updateRoom(roomIndex, (current) => ({ ...current, images: [...current.images, ''] }))} className="small-action"><Plus className="w-3.5 h-3.5" /> 添加空间图片</button>
           </div>
         ))}
       </section>
 
-      <section className="space-y-4 border-t border-gf-tea/15 pt-5">
+      <section className="space-y-4 border-t border-studio-line pt-6">
         <div className="flex justify-between items-center"><h3 className="section-title">制作阶段</h3><button type="button" onClick={() => update('worksteps', [...draft.worksteps, { id: createUniqueId(), name: '', status: 'NEXT', detail: '', images: [] }])} className="small-action"><Plus className="w-3.5 h-3.5" /> 添加阶段</button></div>
         {draft.worksteps.map((step, index) => {
           const slot = `step-${step.id}`;
           return (
-            <div key={step.id} className="p-4 border border-gf-tea/15 bg-white/40 rounded space-y-3">
+            <div key={step.id} className="ui-panel-muted space-y-3 p-4">
               <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
                 <input required value={step.name} onChange={(event) => updateStep(index, (current) => ({ ...current, name: event.target.value }))} placeholder="阶段名称" className="field-input md:col-span-4" />
                 <select value={step.status} onChange={(event) => updateStep(index, (current) => ({ ...current, status: event.target.value as WorkStep['status'] }))} className="field-input md:col-span-3"><option value="DONE">已完成</option><option value="ACTIVE">进行中</option><option value="NEXT">待开始</option></select>
                 <input value={step.detail ?? ''} onChange={(event) => updateStep(index, (current) => ({ ...current, detail: event.target.value }))} placeholder="阶段说明" className="field-input md:col-span-4" />
-                <button type="button" onClick={() => update('worksteps', draft.worksteps.filter((_, itemIndex) => itemIndex !== index))} className="text-red-700 justify-self-end" title="删除阶段"><Trash2 className="w-4 h-4" /></button>
+                <button type="button" onClick={() => update('worksteps', draft.worksteps.filter((_, itemIndex) => itemIndex !== index))} className="justify-self-end text-studio-danger" title="删除阶段"><Trash2 className="h-4 w-4" /></button>
               </div>
               <ImageField label="阶段主图" value={step.image ?? ''} progress={uploads[slot]?.progress} message={uploads[slot]?.message} onChange={(url) => updateStep(index, (current) => ({ ...current, image: url, images: current.images?.length ? [url, ...current.images.slice(1)] : url ? [url] : [] }))} onUpload={(file) => void upload(file, slot, (url) => updateStep(index, (current) => ({ ...current, image: url, images: current.images?.length ? [url, ...current.images.slice(1)] : [url] })))} />
               <textarea rows={2} placeholder="更多过程图 URL，每行一张" value={step.images?.join('\n') ?? ''} onChange={(event) => updateStep(index, (current) => ({ ...current, images: event.target.value.split('\n'), image: event.target.value.split('\n').find(Boolean) ?? '' }))} className="field-input font-mono text-xs" />
@@ -272,9 +273,9 @@ export default function ProjectEditor({ project, categories, hiddenCategories, o
         })}
       </section>
 
-      <div className="flex justify-end gap-3 border-t border-gf-tea/15 pt-5">
-        <button type="button" onClick={onCancel} className="px-5 py-2 border border-gf-tea/30 rounded text-xs">取消</button>
-        <button type="submit" disabled={saving} className="px-5 py-2 bg-gf-wood text-gf-rice rounded text-xs font-bold flex items-center gap-2 disabled:opacity-50"><Save className="w-4 h-4" /> {saving ? '正在保存并等待确认' : '保存项目'}</button>
+      <div className="flex justify-end gap-3 border-t border-studio-line pt-5">
+        <button type="button" onClick={onCancel} className="button-secondary">取消</button>
+        <button type="submit" disabled={saving} className="button-primary"><Save className="h-4 w-4" /> {saving ? '正在保存并等待确认' : '保存项目'}</button>
       </div>
     </form>
   );
