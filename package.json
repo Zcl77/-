@@ -11,14 +11,15 @@
     "websocket-driver": "0.7.5"
   },
   "scripts": {
-    "dev": "vite --configLoader runner --host 0.0.0.0 --port 3000",
+    "dev": "vite --configLoader runner --host 127.0.0.1 --port 3000",
     "build": "vite build --configLoader runner",
-    "preview": "vite preview --configLoader runner --host 0.0.0.0 --port 3000",
+    "preview": "vite preview --configLoader runner --host 127.0.0.1 --port 3000",
     "typecheck": "tsc --noEmit",
-    "lint": "npm run typecheck",
-    "test": "vitest run tests/validation.test.ts --configLoader runner",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "test": "vitest run tests/validation.test.ts tests/backend.test.ts --configLoader runner",
     "test:rules": "firebase emulators:exec --project demo-zhixing-studio --only firestore,storage \"vitest run tests/rules --configLoader runner\"",
-    "check": "npm run typecheck && npm test && npm run build",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "admin:claim": "node scripts/set-admin-claim.mjs",
     "migrate:data": "node scripts/migrate-firebase-data.mjs"
   },
@@ -30,17 +31,23 @@
     "react-dom": "^19.0.1"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@firebase/rules-unit-testing": "^5.0.0",
     "@tailwindcss/vite": "^4.1.14",
     "@types/node": "^22.14.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^5.0.4",
+    "eslint": "^10.8.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "firebase-admin": "^13.4.0",
     "firebase-tools": "^14.0.0",
+    "globals": "^17.9.0",
+    "prettier": "^3.9.6",
     "tailwindcss": "^4.1.14",
     "typescript": "~5.8.2",
-    "vite": "^6.2.3",
+    "typescript-eslint": "^8.66.0",
+    "vite": "^6.4.3",
     "vitest": "^3.2.4"
   }
 }
