@@ -2,6 +2,7 @@ node_modules/
 build/
 dist/
 coverage/
+artifacts/
 .firebase/
 .DS_Store
 *.log
