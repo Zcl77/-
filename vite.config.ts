@@ -20,5 +20,19 @@ export default defineConfig(() => {
       hmr: process.env.DISABLE_HMR !== 'true',
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'react-vendor': ['react', 'react-dom'],
+            'firebase-core': ['firebase/app', 'firebase/auth'],
+            'firebase-firestore': ['firebase/firestore'],
+            'firebase-storage': ['firebase/storage'],
+            'motion-vendor': ['motion/react'],
+            'icons-vendor': ['lucide-react'],
+          },
+        },
+      },
+    },
   };
 });
