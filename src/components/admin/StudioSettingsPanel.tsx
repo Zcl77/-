@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { QrCode, Save, Upload } from 'lucide-react';
-import { UploadDestination } from '../../services/firebase/storageRepository';
+import { UploadDestination } from '../../services/backend';
 import { StoredImage, StudioSettings } from '../../types';
 import StatusNotice from '../ui/StatusNotice';
 
@@ -24,7 +24,7 @@ export default function StudioSettingsPanel({ settings, onSave, onUploadAsset }:
     try {
       const asset = await onUploadAsset(file, { scope: 'settings', ownerId: 'studio', slot: 'wechat-qr' }, setProgress);
       setDraft((current) => ({ ...current, wechatQrUrl: asset.url, wechatQrAsset: asset }));
-      setMessage('图片已上传到 Storage。点击“保存设置”后才会正式生效。');
+      setMessage('图片已上传到媒体存储。点击“保存设置”后才会正式生效。');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '图片上传失败。');
     } finally {

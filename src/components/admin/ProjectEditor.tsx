@@ -3,7 +3,7 @@ import { Image as ImageIcon, Plus, Save, Trash2, Upload, X } from 'lucide-react'
 import { Project, RoomDetail, StoredImage, WorkStep } from '../../types';
 import { createUniqueId, validateProject } from '../../domain/validation';
 import { applyProjectVisibility, retainReferencedAssets } from '../../domain/visibility';
-import { UploadDestination } from '../../services/firebase/storageRepository';
+import { UploadDestination } from '../../services/backend';
 import StatusNotice from '../ui/StatusNotice';
 
 interface ProjectEditorProps {

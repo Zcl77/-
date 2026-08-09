@@ -10,11 +10,14 @@ import {
   ImagePlus,
   Images,
   QrCode,
+  RefreshCw,
   Ruler,
   Users,
   X,
 } from 'lucide-react';
 import { CraftsmanProfile, ImageEditContext, Project } from '../types';
+import { DataProvider } from '../services/backend';
+import { StudioDataStatus } from '../hooks/useStudioData';
 import CraftsmanContactModal from './gallery/CraftsmanContactModal';
 import GalleryProjectSidebar from './gallery/GalleryProjectSidebar';
 import MediaLightbox from './ui/MediaLightbox';
@@ -31,6 +34,10 @@ interface GalleryViewProps {
   craftsmenProfiles?: Record<string, CraftsmanProfile>;
   onUpdateCraftsmenProfiles?: (profiles: Record<string, CraftsmanProfile>) => Promise<void>;
   onUploadImage?: (file: File, context: ImageEditContext) => Promise<void>;
+  dataStatus: StudioDataStatus;
+  dataProvider: DataProvider;
+  dataSourceLabel: string;
+  onRetry: () => void;
 }
 
 interface ActiveMedia {
@@ -76,6 +83,10 @@ export default function GalleryView({
   craftsmenProfiles = {},
   onUpdateCraftsmenProfiles,
   onUploadImage,
+  dataStatus,
+  dataProvider,
+  dataSourceLabel,
+  onRetry,
 }: GalleryViewProps) {
   const [selectedCategory, setSelectedCategory] = useState<string | 'All'>('All');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -178,7 +189,10 @@ export default function GalleryView({
             <div>
               <span className="page-kicker">Miniature architecture archive</span>
               <h1 className="page-title mt-2">知行造境 <span className="block text-base font-normal text-studio-muted sm:inline sm:text-lg">/ Zhixing Studio</span></h1>
-              <p className="page-description mt-3">以图像为主的微缩建筑与场景制作档案。当前作品均标注真实或演示状态。</p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <p className="page-description">微缩建筑、场景模型与制作工艺档案。作品图片优先，演示内容均有明确标记。</p>
+                {dataProvider === 'mock' && <span className="tag border-studio-warning/40 text-studio-warning">本地演示</span>}
+              </div>
             </div>
             <nav className="-mx-1 flex max-w-full gap-2 overflow-x-auto px-1 pb-1" aria-label="作品分类">
               {['All', ...visibleCategories].map((category) => {
@@ -423,16 +437,20 @@ export default function GalleryView({
         ) : (
           <StatusNotice
             tone="empty"
-            title="当前分类暂无可公开展示的作品"
-            description="隐藏分类和隐藏作品不会出现在访客页面。可以返回全部作品继续浏览。"
-            className="mt-8"
-            action={<button type="button" onClick={() => setSelectedCategory('All')} className="button-secondary"><Images className="h-4 w-4" />查看全部作品</button>}
+            title={projects.length === 0 ? '暂无已发布作品' : '该分类暂无公开作品'}
+            description={projects.length === 0
+              ? `${dataSourceLabel}当前返回 0 个公开项目。这是有效的空数据状态，不会用伪造内容掩盖。`
+              : '其他分类仍有作品可浏览；隐藏项目不会出现在访客页面。'}
+            className="mt-8 min-h-44"
+            action={projects.length === 0
+              ? <button type="button" onClick={onRetry} disabled={dataStatus === 'loading'} className="button-secondary"><RefreshCw className="h-4 w-4" />重新检查数据</button>
+              : <button type="button" onClick={() => setSelectedCategory('All')} className="button-secondary"><Images className="h-4 w-4" />查看全部作品</button>}
           />
         )}
 
         <footer className="mt-14 flex flex-col justify-between gap-2 border-t border-studio-line py-6 text-[10px] text-studio-faint sm:flex-row">
           <span>知行造境 / Zhixing Studio</span>
-          <span>微缩建筑与场景制作</span>
+          <span>{dataProvider === 'mock' ? '本地演示内容' : '微缩建筑与场景制作'}</span>
         </footer>
       </div>
 

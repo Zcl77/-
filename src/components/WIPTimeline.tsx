@@ -48,9 +48,9 @@ export default function WIPTimeline({ projects }: WIPTimelineProps) {
     <div className="page-shell">
       <div className="page-inner">
         <header className="border-b border-studio-line pb-6 md:pb-8">
-          <span className="page-kicker">Project progress</span>
-          <h1 className="page-title mt-2">制作进度</h1>
-          <p className="page-description mt-3">记录模型从结构、装配到表面处理的阶段状态与过程图片。实际工艺和交付节点以项目记录为准。</p>
+          <span className="page-kicker">Public making journal</span>
+          <h1 className="page-title mt-2">公开制作日志</h1>
+          <p className="page-description mt-3">记录公开作品从结构、装配到表面处理的工艺节点与过程图片。本页不是客户专属交付进度，私有项目将在后续独立入口中提供。</p>
         </header>
 
         {selectedProject ? (
@@ -201,7 +201,7 @@ export default function WIPTimeline({ projects }: WIPTimelineProps) {
             </div>
           </div>
         ) : (
-          <StatusNotice tone="empty" title="暂无可公开查看的项目进度" description="隐藏分类及其作品不会出现在访客进度页面。" className="mt-8" />
+          <StatusNotice tone="empty" title="暂无公开制作日志" description="当前没有带公开工艺记录的作品；隐藏项目不会出现在访客页面。" className="mt-8" />
         )}
       </div>
 

@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Contact, FolderKanban, LogOut, MessageSquareText, Tags } from 'lucide-react';
 import { Project, Review, ReviewStatus, StoredImage, StudioSettings } from '../types';
-import { AdminAuthSnapshot } from '../services/firebase/authRepository';
-import { UploadDestination } from '../services/firebase/storageRepository';
+import { AdminAuthSnapshot, UploadDestination } from '../services/backend';
 import AdminLogin from './admin/AdminLogin';
 import CategoryManager from './admin/CategoryManager';
 import ProjectEditor, { createProjectDraft } from './admin/ProjectEditor';
@@ -20,6 +19,7 @@ interface AdminDashboardProps {
   hiddenCategories: string[];
   isAdmin: boolean;
   authState: AdminAuthSnapshot;
+  dataSourceLabel: string;
   studioSettings: StudioSettings;
   onLogin: () => Promise<void>;
   onLogout: () => Promise<void>;
@@ -51,7 +51,7 @@ export default function AdminDashboard(props: AdminDashboardProps) {
     setMessage(null);
   }, [props.isAdmin]);
 
-  if (!props.isAdmin) return <AdminLogin authState={props.authState} onLogin={props.onLogin} />;
+  if (!props.isAdmin) return <AdminLogin authState={props.authState} dataSourceLabel={props.dataSourceLabel} onLogin={props.onLogin} />;
 
   const runItemAction = async (id: string, action: () => Promise<void>, success: string) => {
     setBusyId(id);
@@ -104,7 +104,7 @@ export default function AdminDashboard(props: AdminDashboardProps) {
             onCancel={() => setShowEditor(false)}
             onSave={async (project) => {
               await props.onSaveProject(project);
-              setMessage('项目已保存并由 Firebase 确认。');
+              setMessage(`项目已保存并由${props.dataSourceLabel}确认。`);
               setShowEditor(false);
             }}
           />
