@@ -1,4 +1,12 @@
 node_modules/
+.venv/
+backend/.venv/
+backend/media/
+backend/staticfiles/
+backend/*.sqlite3
+__pycache__/
+*.py[cod]
+.pytest_cache/
 build/
 dist/
 coverage/

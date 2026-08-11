@@ -1,0 +1,13 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+.firebase
+artifacts
+backend/**/__pycache__
+backend/**/*.pyc
+coverage
+dist
+node_modules
+*.log
