@@ -51,4 +51,5 @@ def serialize_user(user):
         "role": user.role,
         "isStaff": user.is_staff,
         "mustChangePassword": user.must_change_password,
+        "isDevData": user.is_dev_data,
     }

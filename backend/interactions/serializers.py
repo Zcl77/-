@@ -16,7 +16,7 @@ class ApprovedReviewSerializer(StrictModelSerializer):
 
     class Meta:
         model = Review
-        fields = ("id", "reviewer_name", "project_name", "rating", "comment", "created_at", "work")
+        fields = ("id", "reviewer_name", "project_name", "rating", "comment", "created_at", "is_dev_data", "work")
         read_only_fields = fields
 
     def get_work(self, obj):

@@ -28,6 +28,7 @@ class WorkImageSerializer(StrictModelSerializer):
 class WorkListSerializer(StrictModelSerializer):
     category = CategorySerializer(read_only=True)
     cover = serializers.SerializerMethodField()
+    images = serializers.SerializerMethodField()
 
     class Meta:
         model = Work
@@ -36,13 +37,19 @@ class WorkListSerializer(StrictModelSerializer):
             "title",
             "slug",
             "summary",
+            "description",
             "category",
             "is_featured",
+            "is_dev_data",
             "scale",
+            "dimensions",
+            "materials",
             "period",
+            "authors",
             "completion_percent",
             "published_at",
             "cover",
+            "images",
         )
         read_only_fields = fields
 
@@ -52,15 +59,12 @@ class WorkListSerializer(StrictModelSerializer):
         image = cover or next(iter(images), None)
         return WorkImageSerializer(image, context=self.context).data if image else None
 
-
-class WorkDetailSerializer(WorkListSerializer):
-    images = serializers.SerializerMethodField()
-
-    class Meta(WorkListSerializer.Meta):
-        fields = WorkListSerializer.Meta.fields + ("description", "dimensions", "materials", "authors", "images")
-
     def get_images(self, obj):
         return WorkImageSerializer(getattr(obj, "public_images", []), many=True, context=self.context).data
+
+
+class WorkDetailSerializer(WorkListSerializer):
+    pass
 
 
 class PublicProcessPostSerializer(StrictModelSerializer):
@@ -69,7 +73,7 @@ class PublicProcessPostSerializer(StrictModelSerializer):
 
     class Meta:
         model = PublicProcessPost
-        fields = ("id", "title", "slug", "summary", "body", "published_at", "work", "images")
+        fields = ("id", "title", "slug", "summary", "body", "published_at", "is_dev_data", "work", "images")
         read_only_fields = fields
 
     def get_work(self, obj):
@@ -104,5 +108,6 @@ class StudioSettingSerializer(StrictModelSerializer):
             "wechat",
             "email",
             "privacy_notice",
+            "is_dev_data",
         )
         read_only_fields = fields

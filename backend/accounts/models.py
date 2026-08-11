@@ -15,6 +15,7 @@ class User(AbstractUser):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     role = models.CharField(max_length=16, choices=Role.choices, default=Role.CUSTOMER)
     must_change_password = models.BooleanField(default=True)
+    is_dev_data = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -45,7 +45,7 @@ class PublicProcessPostAdmin(admin.ModelAdmin):
 
 @admin.register(StudioSetting)
 class StudioSettingAdmin(admin.ModelAdmin):
-    list_display = ("studio_name", "phone", "wechat", "email", "updated_at")
+    list_display = ("studio_name", "phone", "wechat", "email", "updated_at", "is_dev_data")
 
     def has_add_permission(self, request):
         return not StudioSetting.objects.exists()

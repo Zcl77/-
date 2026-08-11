@@ -23,6 +23,7 @@ if not SECRET_KEY:
     raise ImproperlyConfigured("DJANGO_SECRET_KEY must be set outside source control.")
 
 DEBUG = env_bool("DJANGO_DEBUG")
+ENVIRONMENT = os.getenv("DJANGO_ENVIRONMENT", "production").strip().lower()
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,backend")
 CSRF_TRUSTED_ORIGINS = env_list(
     "DJANGO_CSRF_TRUSTED_ORIGINS",

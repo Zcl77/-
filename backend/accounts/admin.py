@@ -7,13 +7,13 @@ from .models import CustomerProfile, SecurityEvent, User
 @admin.register(User)
 class StudioUserAdmin(UserAdmin):
     fieldsets = UserAdmin.fieldsets + (
-        ("知行造境", {"fields": ("role", "must_change_password")}),
+        ("知行造境", {"fields": ("role", "must_change_password", "is_dev_data")}),
     )
     add_fieldsets = UserAdmin.add_fieldsets + (
-        ("知行造境", {"fields": ("role", "must_change_password")}),
+        ("知行造境", {"fields": ("role", "must_change_password", "is_dev_data")}),
     )
-    list_display = ("username", "email", "role", "must_change_password", "is_staff", "is_active")
-    list_filter = ("role", "must_change_password", "is_staff", "is_active")
+    list_display = ("username", "email", "role", "must_change_password", "is_staff", "is_active", "is_dev_data")
+    list_filter = ("role", "must_change_password", "is_staff", "is_active", "is_dev_data")
 
 
 @admin.register(CustomerProfile)

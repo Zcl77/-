@@ -1,6 +1,6 @@
 import tempfile
 
-from django.test import TestCase, override_settings
+from django.test import TransactionTestCase, override_settings
 from rest_framework.test import APIClient
 
 from accounts.models import CustomerProfile, User
@@ -10,7 +10,7 @@ from media_library.models import MediaAsset
 from projects.models import ClientProject, Order, ProgressImage, ProgressUpdate, ProjectMessage
 
 
-class CustomerObjectPermissionTests(TestCase):
+class CustomerObjectPermissionTests(TransactionTestCase):
     def setUp(self):
         self.media_directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.media_directory.cleanup)

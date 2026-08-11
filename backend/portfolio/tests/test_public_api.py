@@ -1,6 +1,6 @@
 import tempfile
 
-from django.test import TestCase, override_settings
+from django.test import TransactionTestCase, override_settings
 from rest_framework.test import APIClient
 
 from common.tests.utils import image_upload
@@ -9,7 +9,7 @@ from media_library.models import MediaAsset
 from portfolio.models import Category, PublicProcessPost, Work, WorkImage
 
 
-class PublicPortfolioApiTests(TestCase):
+class PublicPortfolioApiTests(TransactionTestCase):
     def setUp(self):
         self.media_directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.media_directory.cleanup)

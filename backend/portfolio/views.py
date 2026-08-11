@@ -49,6 +49,7 @@ class SiteView(APIView):
                     "wechat": "",
                     "email": "",
                     "privacy_notice": "",
+                    "is_dev_data": False,
                 }
             )
         return Response(StudioSettingSerializer(setting).data)

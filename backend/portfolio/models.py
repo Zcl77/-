@@ -175,6 +175,7 @@ class StudioSetting(UUIDTimeStampedModel):
     wechat = models.CharField(max_length=64, blank=True)
     email = models.EmailField(blank=True)
     privacy_notice = models.TextField(max_length=5000, blank=True)
+    is_dev_data = models.BooleanField(default=False)
 
     def __str__(self):
         return self.studio_name
