@@ -30,6 +30,7 @@ export function createProjectDraft(categories: string[], hiddenCategories: strin
   const category = categories[0] ?? '未分类';
   return applyProjectVisibility({
     id: createUniqueId(),
+    slug: '',
     title: '',
     scale: '1:64',
     category,

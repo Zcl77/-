@@ -41,12 +41,12 @@ export default function GalleryProjectSidebar({ selectedProject, projects, selec
             {selectedProject.isDemo && <span className="tag border-studio-warning/40 text-studio-warning">演示内容</span>}
           </div>
 
-          <dl className="mt-6 grid grid-cols-2 border-y border-studio-line">
-            <div className="border-r border-studio-line py-4 pr-4">
+          <dl className={`mt-6 grid ${selectedProject.timeSpent === undefined ? 'grid-cols-1' : 'grid-cols-2'} border-y border-studio-line`}>
+            {selectedProject.timeSpent !== undefined && <div className="border-r border-studio-line py-4 pr-4">
               <dt className="flex items-center gap-2 text-[10px] uppercase text-studio-faint"><Clock3 className="h-3.5 w-3.5" />制作耗时</dt>
               <dd className="mt-2 font-serif text-xl text-studio-ink">{selectedProject.timeSpent}<span className="ml-1 text-xs text-studio-muted">小时</span></dd>
-            </div>
-            <div className="py-4 pl-4">
+            </div>}
+            <div className={`py-4 ${selectedProject.timeSpent === undefined ? '' : 'pl-4'}`}>
               <dt className="flex items-center gap-2 text-[10px] uppercase text-studio-faint"><Gauge className="h-3.5 w-3.5" />完成比例</dt>
               <dd className="mt-2 font-serif text-xl text-studio-ink">{selectedProject.completionPercent}<span className="ml-1 text-xs text-studio-muted">%</span></dd>
             </div>
@@ -92,7 +92,7 @@ export default function GalleryProjectSidebar({ selectedProject, projects, selec
                   <span className="min-w-0 flex-1">
                     <span className="block text-[10px] text-studio-faint">{String(index + 1).padStart(2, '0')}</span>
                     <strong className="mt-0.5 block truncate font-serif text-sm font-semibold text-studio-ink">{project.title}</strong>
-                    <span className="mt-1 block text-[10px] text-studio-muted">{project.scale} · {project.timeSpent} 小时</span>
+                    <span className="mt-1 block text-[10px] text-studio-muted">{project.scale || '比例待补充'}{project.timeSpent === undefined ? '' : ` · ${project.timeSpent} 小时`}</span>
                   </span>
                 </button>
               );

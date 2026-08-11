@@ -74,7 +74,7 @@ export function validateProject(project: Project): string[] {
   if (!Number.isFinite(project.completionPercent) || project.completionPercent < 0 || project.completionPercent > 100) {
     errors.push('完成比例必须在 0–100 之间。');
   }
-  if (!Number.isFinite(project.timeSpent) || project.timeSpent < 0) {
+  if (project.timeSpent !== undefined && (!Number.isFinite(project.timeSpent) || project.timeSpent < 0)) {
     errors.push('累计工时不能为负数。');
   }
   if (project.images.length > 100 || project.worksteps.length > 100 || (project.rooms?.length ?? 0) > 100) {

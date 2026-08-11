@@ -17,6 +17,7 @@ import { db } from './client';
 function normalizeProject(id: string, value: Partial<Project>): Project {
   return {
     id,
+    slug: value.slug ?? id,
     title: value.title ?? '',
     scale: value.scale ?? '',
     category: value.category ?? '未分类',

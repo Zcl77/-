@@ -7,9 +7,7 @@ import {
   ChevronRight,
   Compass,
   Expand,
-  ImagePlus,
   Images,
-  QrCode,
   Ruler,
   Users,
   X,
@@ -21,8 +19,7 @@ import {
   resolveGalleryMedia,
   resolveSelectedProject,
 } from '../domain/gallerySelection';
-import { CraftsmanProfile, ImageEditContext, Project } from '../types';
-import CraftsmanContactModal from './gallery/CraftsmanContactModal';
+import { Project } from '../types';
 import GalleryProjectSidebar from './gallery/GalleryProjectSidebar';
 import MediaLightbox from './ui/MediaLightbox';
 import SmartImage from './ui/SmartImage';
@@ -31,13 +28,9 @@ import StatusNotice from './ui/StatusNotice';
 interface GalleryViewProps {
   projects: Project[];
   categories: string[];
-  hiddenCategories?: string[];
-  isAdmin?: boolean;
-  activeEditContext?: ImageEditContext | null;
-  setActiveEditContext?: (context: ImageEditContext | null) => void;
-  craftsmenProfiles?: Record<string, CraftsmanProfile>;
-  onUpdateCraftsmenProfiles?: (profiles: Record<string, CraftsmanProfile>) => Promise<void>;
-  onUploadImage?: (file: File, context: ImageEditContext) => Promise<void>;
+  selectedProjectSlug?: string | null;
+  onProjectChange?: (project: Project) => void;
+  onCategoryChange?: () => void;
 }
 
 interface LightboxState {
@@ -50,34 +43,29 @@ interface LightboxState {
 export default function GalleryView({
   projects,
   categories,
-  hiddenCategories = [],
-  isAdmin = false,
-  activeEditContext = null,
-  setActiveEditContext,
-  craftsmenProfiles = {},
-  onUpdateCraftsmenProfiles,
-  onUploadImage,
+  selectedProjectSlug = null,
+  onProjectChange,
+  onCategoryChange,
 }: GalleryViewProps) {
   const [selectedCategory, setSelectedCategory] = useState<string | 'All'>('All');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [activeMediaSelection, setActiveMediaSelection] = useState<GalleryMediaSelection | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
-  const [activeCraftsmanName, setActiveCraftsmanName] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
 
-  const visibleCategories = useMemo(
-    () => categories.filter((category) => !hiddenCategories.includes(category)),
-    [categories, hiddenCategories],
-  );
+  const visibleCategories = categories;
   const filteredProjects = useMemo(
     () => selectedCategory === 'All'
-      ? projects.filter((project) => !hiddenCategories.includes(project.category))
+      ? projects
       : projects.filter((project) => project.category === selectedCategory),
-    [hiddenCategories, projects, selectedCategory],
+    [projects, selectedCategory],
   );
   const selectedProject = useMemo(
-    () => resolveSelectedProject(filteredProjects, selectedProjectId),
-    [filteredProjects, selectedProjectId],
+    () => resolveSelectedProject(
+      filteredProjects,
+      filteredProjects.find((project) => project.slug === selectedProjectSlug)?.id ?? selectedProjectId,
+    ),
+    [filteredProjects, selectedProjectId, selectedProjectSlug],
   );
   const media = useMemo(() => listProjectMedia(selectedProject), [selectedProject]);
   const effectiveMediaSelection = selectedProject?.id === selectedProjectId ? activeMediaSelection : null;
@@ -97,18 +85,11 @@ export default function GalleryView({
   }, [lightbox, selectedProject]);
 
   useEffect(() => {
-    if (selectedCategory !== 'All' && hiddenCategories.includes(selectedCategory)) {
-      setSelectedCategory('All');
-    }
-  }, [hiddenCategories, selectedCategory]);
-
-  useEffect(() => {
     if (selectedProject?.id !== selectedProjectId) {
       setSelectedProjectId(selectedProject?.id ?? null);
       setActiveMediaSelection(null);
       setSelectedRoomId(null);
       setLightbox(null);
-      setActiveCraftsmanName(null);
     }
   }, [selectedProject?.id, selectedProjectId]);
 
@@ -131,35 +112,7 @@ export default function GalleryView({
     setSelectedProjectId(project.id);
     setActiveMediaSelection(null);
     setSelectedRoomId(null);
-  };
-
-  const getIsSelected = (type: ImageEditContext['type'], details?: { index?: number; roomId?: string; craftsmanName?: string }) => {
-    if (!isAdmin || !activeEditContext || activeEditContext.type !== type) return false;
-    if (type === 'craftsman-qr') return activeEditContext.craftsmanName === details?.craftsmanName;
-    if (!selectedProject || activeEditContext.projectId !== selectedProject.id) return false;
-    if (type === 'project-cover') return true;
-    if (type === 'project-image') return activeEditContext.imageIndex === details?.index;
-    if (type === 'room-cover') return activeEditContext.roomId === details?.roomId;
-    if (type === 'room-image') return activeEditContext.roomId === details?.roomId && activeEditContext.imageIndex === details?.index;
-    return false;
-  };
-
-  const selectEditTarget = (
-    type: 'project-cover' | 'project-image' | 'room-cover' | 'room-image' | 'craftsman-qr',
-    details?: { index?: number; roomId?: string; craftsmanName?: string },
-  ) => {
-    if (!isAdmin || !setActiveEditContext) return;
-    if (getIsSelected(type, details)) {
-      setActiveEditContext(null);
-      return;
-    }
-    setActiveEditContext({
-      type,
-      projectId: type === 'craftsman-qr' ? undefined : selectedProject?.id,
-      imageIndex: details?.index,
-      roomId: details?.roomId,
-      craftsmanName: details?.craftsmanName,
-    });
+    onProjectChange?.(project);
   };
 
   const changeProjectImage = (direction: -1 | 1) => {
@@ -181,10 +134,6 @@ export default function GalleryView({
     setLightbox({ source: 'project', activeIndex: index, alt: selectedProject.title });
   };
 
-  const currentEditSelected = activeMedia
-    ? getIsSelected(activeMedia.type, { index: activeMedia.imageIndex, roomId: activeMedia.roomId })
-    : false;
-
   return (
     <div className="page-shell">
       <div className="page-inner">
@@ -202,7 +151,7 @@ export default function GalleryView({
                   <button
                     key={category}
                     type="button"
-                    onClick={() => setSelectedCategory(category)}
+                    onClick={() => { setSelectedCategory(category); onCategoryChange?.(); }}
                     aria-pressed={active}
                     className={`min-h-9 shrink-0 rounded-[4px] border px-3 text-xs transition-colors duration-200 ${active ? 'border-studio-brass bg-studio-brass text-studio-canvas' : 'border-studio-line text-studio-muted hover:border-studio-faint hover:text-studio-ink'}`}
                   >
@@ -247,29 +196,18 @@ export default function GalleryView({
                     </>
                   )}
 
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => selectEditTarget(activeMedia.type, { index: activeMedia.imageIndex, roomId: activeMedia.roomId })}
-                      className={`absolute right-3 top-3 inline-flex min-h-9 items-center gap-2 rounded-[4px] border px-3 text-xs font-semibold ${currentEditSelected ? 'border-studio-warning bg-studio-warning text-studio-canvas' : 'border-studio-line bg-studio-canvas/90 text-studio-ink hover:border-studio-faint'}`}
-                    >
-                      <ImagePlus className="h-4 w-4" />
-                      {currentEditSelected ? '已锁定替换目标' : '替换当前图片'}
-                    </button>
-                  )}
                 </div>
 
                 <div className="mt-3 flex gap-2 overflow-x-auto pb-2" aria-label="作品图片缩略图">
                   {media.map((item, index) => {
                     const active = activeMedia.key === item.key && activeMedia.type !== 'room-image';
-                    const editSelected = getIsSelected(item.type, { index: item.imageIndex });
                     return (
                       <button
                         key={item.key}
                         type="button"
                         onClick={() => setActiveMediaSelection(mediaSelection(item))}
                         aria-pressed={active}
-                        className={`group relative aspect-[4/3] w-24 shrink-0 overflow-hidden rounded-[4px] border bg-studio-surface sm:w-28 ${active ? 'border-studio-brass' : 'border-studio-line opacity-70 hover:opacity-100'} ${editSelected ? 'ring-2 ring-studio-warning' : ''}`}
+                        className={`group relative aspect-[4/3] w-24 shrink-0 overflow-hidden rounded-[4px] border bg-studio-surface sm:w-28 ${active ? 'border-studio-brass' : 'border-studio-line opacity-70 hover:opacity-100'}`}
                       >
                         <SmartImage src={item.url} alt={`${selectedProject.title} ${index === 0 ? '封面缩略图' : `视角 ${index} 缩略图`}`} className="media-hover h-full w-full object-cover" referrerPolicy="no-referrer" loading="lazy" decoding="async" />
                         <span className="absolute bottom-1 right-1 rounded-[2px] bg-studio-canvas/90 px-1.5 py-0.5 text-[9px] text-studio-muted">
@@ -294,9 +232,9 @@ export default function GalleryView({
                     <span>{selectedProject.category}</span><span aria-hidden="true">/</span><span>{selectedProject.scale}</span>
                     {selectedProject.isDemo && <span className="tag border-studio-warning/40 text-studio-warning">演示内容</span>}
                   </div>
-                  <div className="mt-4 grid grid-cols-2 border-y border-studio-line py-3 text-xs">
-                    <span className="border-r border-studio-line pr-3 text-studio-muted">制作耗时 <strong className="ml-1 text-studio-ink">{selectedProject.timeSpent} 小时</strong></span>
-                    <span className="pl-3 text-studio-muted">完成比例 <strong className="ml-1 text-studio-ink">{selectedProject.completionPercent}%</strong></span>
+                  <div className={`mt-4 grid ${selectedProject.timeSpent === undefined ? 'grid-cols-1' : 'grid-cols-2'} border-y border-studio-line py-3 text-xs`}>
+                    {selectedProject.timeSpent !== undefined && <span className="border-r border-studio-line pr-3 text-studio-muted">制作耗时 <strong className="ml-1 text-studio-ink">{selectedProject.timeSpent} 小时</strong></span>}
+                    <span className={`${selectedProject.timeSpent === undefined ? '' : 'pl-3'} text-studio-muted`}>完成比例 <strong className="ml-1 text-studio-ink">{selectedProject.completionPercent}%</strong></span>
                   </div>
                 </div>
               </section>
@@ -323,9 +261,7 @@ export default function GalleryView({
                       <div className="flex items-center gap-2 text-xs font-semibold text-studio-ink"><Users className="h-4 w-4 text-studio-brass" />参与成员</div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {selectedProject.authors.map((author) => (
-                          <button key={author} type="button" onClick={() => setActiveCraftsmanName(author)} className="tag hover:border-studio-brass hover:text-studio-ink" title={`查看 ${author} 的联系信息`}>
-                            {author}<QrCode className="h-3 w-3" />
-                          </button>
+                          <span key={author} className="tag">{author}</span>
                         ))}
                       </div>
                     </div>
@@ -344,7 +280,6 @@ export default function GalleryView({
                   <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
                     {selectedProject.rooms.map((room) => {
                       const active = selectedRoomId === room.id;
-                      const editSelected = getIsSelected('room-cover', { roomId: room.id });
                       return (
                         <article key={room.id} className={`group relative overflow-hidden rounded-[6px] border bg-studio-surface ${active ? 'border-studio-brass' : 'border-studio-line'}`}>
                           <button type="button" onClick={() => setSelectedRoomId(active ? null : room.id)} className="block w-full text-left" aria-expanded={active}>
@@ -359,11 +294,6 @@ export default function GalleryView({
                               <span className="text-xs text-studio-brass">{active ? '收起' : '查看细节'}</span>
                             </span>
                           </button>
-                          {isAdmin && (
-                            <button type="button" onClick={() => selectEditTarget('room-cover', { roomId: room.id })} className={`icon-button absolute right-3 top-3 ${editSelected ? 'border-studio-warning bg-studio-warning text-studio-canvas' : ''}`} title="替换房间封面" aria-label={`替换 ${room.name} 封面`}>
-                              <ImagePlus className="h-4 w-4" />
-                            </button>
-                          )}
                         </article>
                       );
                     })}
@@ -409,17 +339,11 @@ export default function GalleryView({
                                   imageIndex,
                                 };
                                 const active = activeMedia.key === item.key;
-                                const editSelected = getIsSelected('room-image', { roomId: room.id, index: imageIndex });
                                 return (
                                   <div key={item.key} className="group relative">
-                                    <button type="button" onClick={() => setActiveMediaSelection(mediaSelection(item))} className={`aspect-[4/3] w-full overflow-hidden rounded-[4px] border bg-black ${active ? 'border-studio-brass' : 'border-studio-line'} ${editSelected ? 'ring-2 ring-studio-warning' : ''}`} aria-label={`在主视图查看 ${item.alt}`}>
+                                    <button type="button" onClick={() => setActiveMediaSelection(mediaSelection(item))} className={`aspect-[4/3] w-full overflow-hidden rounded-[4px] border bg-black ${active ? 'border-studio-brass' : 'border-studio-line'}`} aria-label={`在主视图查看 ${item.alt}`}>
                                       <SmartImage src={image} alt={item.alt} className="media-hover h-full w-full object-cover" referrerPolicy="no-referrer" loading="lazy" decoding="async" />
                                     </button>
-                                    {isAdmin && (
-                                      <button type="button" onClick={() => selectEditTarget('room-image', { roomId: room.id, index: imageIndex })} className={`icon-button absolute right-1.5 top-1.5 h-8 min-h-8 w-8 ${editSelected ? 'border-studio-warning bg-studio-warning text-studio-canvas' : ''}`} title="替换房间细节图片" aria-label={`替换 ${item.alt}`}>
-                                        <ImagePlus className="h-3.5 w-3.5" />
-                                      </button>
-                                    )}
                                   </div>
                                 );
                               })}
@@ -450,20 +374,6 @@ export default function GalleryView({
           <span>微缩建筑与场景制作</span>
         </footer>
       </div>
-
-      {activeCraftsmanName && (
-        <CraftsmanContactModal
-          name={activeCraftsmanName}
-          profile={craftsmenProfiles[activeCraftsmanName]}
-          profiles={craftsmenProfiles}
-          isAdmin={isAdmin}
-          isSelectedForEdit={getIsSelected('craftsman-qr', { craftsmanName: activeCraftsmanName })}
-          onClose={() => setActiveCraftsmanName(null)}
-          onSelectForEdit={() => selectEditTarget('craftsman-qr', { craftsmanName: activeCraftsmanName })}
-          onUpdateProfiles={onUpdateCraftsmenProfiles}
-          onUploadImage={onUploadImage}
-        />
-      )}
 
       {lightbox && lightboxImages.length > 0 && (
         <MediaLightbox

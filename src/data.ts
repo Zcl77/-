@@ -3,6 +3,7 @@ import { Project, Review } from './types';
 export const INITIAL_PROJECTS: Project[] = [
   {
     id: 'qilou-yanduo',
+    slug: 'qilou-yanduo',
     visibility: 'public',
     isDemo: true,
     title: '《骑楼·凝固的烟火》',
@@ -124,6 +125,7 @@ export const INITIAL_PROJECTS: Project[] = [
   },
   {
     id: 'shangbu-laojie',
+    slug: 'shangbu-laojie',
     visibility: 'public',
     isDemo: true,
     title: '《百载商埠·海风旧影》',
@@ -162,6 +164,7 @@ export const INITIAL_PROJECTS: Project[] = [
   },
   {
     id: 'chaozhou-paifang',
+    slug: 'chaozhou-paifang',
     visibility: 'public',
     isDemo: true,
     title: '《古邑余晖·斑驳牌坊》',
@@ -200,6 +203,7 @@ export const INITIAL_PROJECTS: Project[] = [
   },
   {
     id: 'hanjiang-liaoshe',
+    slug: 'hanjiang-liaoshe',
     visibility: 'public',
     isDemo: true,
     title: '《韩江渔火·水上茶寮》',
