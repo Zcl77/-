@@ -7,7 +7,7 @@
 - 将项目、房间、制作步骤、工作室二维码和成员二维码中的受支持 Base64 图片上传到 Storage。
 - 用下载 URL 替换对应 Base64 字段，并记录 `path`、`contentType`、`size`、`originalName`、`uploadedAt`。
 - 保留已有 HTTP/HTTPS 图片 URL，不重复上传。
-- 根据 `metadata/hiddenCategories` 为项目补充 `visibility`，并保留已明确设为 `hidden` 的项目。
+- 根据 `metadata/hiddenCategories` 检查项目可见性。只有原记录已明确设为 `public` 且分类未隐藏时才保持公开；缺少或包含无效 `visibility` 的项目一律设为 `hidden`。
 - 将无有效状态的普通旧评论设为 `pending`。
 - 将仓库内已知的三条演示评论标记为 `isDemo: true`；缺少状态时设为 `approved`。
 - 将仓库内已知的演示项目标记为 `isDemo: true`。
@@ -38,6 +38,15 @@ npm run migrate:data
 ```
 
 脚本会输出预计修改的项目、评论、metadata 文档和图片数量，但不会写入。
+
+可见性预检会逐项列出：
+
+- 保持公开的项目；
+- 将被设为隐藏的项目；
+- 缺少 `visibility` 字段的项目；
+- 是否存在任何会扩大公开范围的操作。
+
+如果预检检测到扩大公开范围的操作，脚本会中止，即使提供了 `--apply` 也不会继续写入。
 
 ## 正式执行
 
