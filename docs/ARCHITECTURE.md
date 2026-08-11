@@ -21,6 +21,12 @@ Browser
 
 Development uses three Compose services: `frontend`, `backend`, and `db`. Production will place an isolated reverse proxy in front, keep MySQL internal, and use an authorization-gated internal redirect for private media.
 
+| Service    | Development binding | Persistent data             |
+| ---------- | ------------------- | --------------------------- |
+| `frontend` | `127.0.0.1:3000`    | none                        |
+| `backend`  | `127.0.0.1:8000`    | `media_data`, `static_data` |
+| `db`       | `127.0.0.1:3307`    | `mysql_data`                |
+
 ## Authentication
 
 - A custom Django user model is present from the first migration.
@@ -49,6 +55,59 @@ Development uses three Compose services: `frontend`, `backend`, and `db`. Produc
 - Originals are retained; display and thumbnail derivatives are generated.
 - Replacement writes and verifies the new file before changing references, then removes unreferenced old files after commit.
 - Production private delivery is designed for Nginx `X-Accel-Redirect`; development uses an authenticated Django response.
+
+## Data model
+
+- Accounts: `User`, `CustomerProfile`, `SecurityEvent`.
+- Public portfolio: `Category`, `Work`, `WorkImage`, `PublicProcessPost`, `PublicProcessImage`, `StudioSetting`.
+- Customer work: `Order`, `ClientProject`, `ProjectMembership`, `ProductionStage`, `ProgressUpdate`, `ProgressImage`, `ProgressReceipt`, `ProjectMessage`, `MessageReadReceipt`.
+- Interaction: `Review`, `Inquiry`, `InquiryAttachment`.
+- Media: `MediaAsset`, shared by public and private references through explicit relations.
+
+`Work` is public portfolio content, `Order` is a commercial record, `ClientProject` is an actual production project, `PublicProcessPost` is a public journal, and `ProgressUpdate` is private customer progress. These concepts must not be merged.
+
+## REST API
+
+Public:
+
+- `GET /api/v1/health`
+- `GET /api/v1/site`
+- `GET /api/v1/categories`
+- `GET /api/v1/works`
+- `GET /api/v1/works/{slug}`
+- `GET /api/v1/public-process`
+- `GET|POST /api/v1/reviews`
+- `POST /api/v1/inquiries`
+- `GET /api/v1/media/public/{asset_id}`
+
+Session authentication:
+
+- `GET /api/v1/auth/csrf`
+- `GET /api/v1/auth/me`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/logout`
+- `POST /api/v1/auth/password/change`
+
+Authorized customer:
+
+- `GET /api/v1/me/orders`
+- `GET /api/v1/me/projects`
+- `GET /api/v1/me/projects/{project_id}`
+- `GET /api/v1/me/projects/{project_id}/stages`
+- `GET /api/v1/me/projects/{project_id}/updates`
+- `GET|POST /api/v1/me/projects/{project_id}/messages`
+- `POST /api/v1/me/projects/{project_id}/updates/{update_id}/acknowledge`
+- `GET /api/v1/me/media/{asset_id}`
+
+Staff writes use Django Admin in the MVP, so the first release deliberately avoids a second custom administration API surface.
+
+## Storage boundary
+
+Application code creates media through `media_library` services and exposes normalized rendition metadata to serializers. The first release uses Django file storage backed by `media_data`; this boundary can later adopt an S3-compatible storage backend without changing React page contracts or storing binary data in MySQL.
+
+## Backup boundary
+
+A usable restore point contains both a transaction-consistent MySQL dump and a media archive. `scripts/backup-local.ps1` creates this pair with a checksum manifest; `scripts/verify-backup.ps1` restores it only into isolated temporary locations for verification. Neither script deletes Docker volumes.
 
 ## Deferred work
 
