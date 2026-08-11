@@ -80,4 +80,3 @@ References:
 - Essential information that appears only on hover.
 - Aggressive image cropping that can remove important parts of a miniature model.
 - Fictional awards, client claims, sales figures, testimonials, or new brand stories.
-

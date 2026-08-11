@@ -14,6 +14,13 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import {
+  GalleryMediaSelection,
+  listProjectMedia,
+  mediaSelection,
+  resolveGalleryMedia,
+  resolveSelectedProject,
+} from '../domain/gallerySelection';
 import { CraftsmanProfile, ImageEditContext, Project } from '../types';
 import CraftsmanContactModal from './gallery/CraftsmanContactModal';
 import GalleryProjectSidebar from './gallery/GalleryProjectSidebar';
@@ -33,37 +40,11 @@ interface GalleryViewProps {
   onUploadImage?: (file: File, context: ImageEditContext) => Promise<void>;
 }
 
-interface ActiveMedia {
-  key: string;
-  url: string;
-  alt: string;
-  type: 'project-cover' | 'project-image' | 'room-image';
-  imageIndex?: number;
-  roomId?: string;
-}
-
 interface LightboxState {
-  images: string[];
+  source: 'project' | 'room';
+  roomId?: string;
   activeIndex: number;
   alt: string;
-}
-
-function projectMedia(project: Project): ActiveMedia[] {
-  return [
-    {
-      key: 'cover',
-      url: project.coverUrl,
-      alt: `${project.title} 封面`,
-      type: 'project-cover' as const,
-    },
-    ...project.images.map((url, imageIndex) => ({
-      key: `project-${imageIndex}`,
-      url,
-      alt: `${project.title} 作品视角 ${imageIndex + 1}`,
-      type: 'project-image' as const,
-      imageIndex,
-    })),
-  ].filter((item) => Boolean(item.url));
 }
 
 export default function GalleryView({
@@ -78,8 +59,8 @@ export default function GalleryView({
   onUploadImage,
 }: GalleryViewProps) {
   const [selectedCategory, setSelectedCategory] = useState<string | 'All'>('All');
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [activeMedia, setActiveMedia] = useState<ActiveMedia | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [activeMediaSelection, setActiveMediaSelection] = useState<GalleryMediaSelection | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [activeCraftsmanName, setActiveCraftsmanName] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
@@ -94,7 +75,26 @@ export default function GalleryView({
       : projects.filter((project) => project.category === selectedCategory),
     [hiddenCategories, projects, selectedCategory],
   );
-  const media = useMemo(() => selectedProject ? projectMedia(selectedProject) : [], [selectedProject]);
+  const selectedProject = useMemo(
+    () => resolveSelectedProject(filteredProjects, selectedProjectId),
+    [filteredProjects, selectedProjectId],
+  );
+  const media = useMemo(() => listProjectMedia(selectedProject), [selectedProject]);
+  const effectiveMediaSelection = selectedProject?.id === selectedProjectId ? activeMediaSelection : null;
+  const activeMedia = useMemo(
+    () => resolveGalleryMedia(selectedProject, effectiveMediaSelection),
+    [effectiveMediaSelection, selectedProject],
+  );
+  const lightboxImages = useMemo(() => {
+    if (!lightbox || !selectedProject) return [];
+    if (lightbox.source === 'project') return listProjectMedia(selectedProject).map((item) => item.url);
+    return selectedProject.rooms?.find((room) => room.id === lightbox.roomId)?.images ?? [];
+  }, [lightbox, selectedProject]);
+  const lightboxAlt = useMemo(() => {
+    if (!lightbox || !selectedProject) return '';
+    if (lightbox.source === 'project') return selectedProject.title;
+    return selectedProject.rooms?.find((room) => room.id === lightbox.roomId)?.name ?? lightbox.alt;
+  }, [lightbox, selectedProject]);
 
   useEffect(() => {
     if (selectedCategory !== 'All' && hiddenCategories.includes(selectedCategory)) {
@@ -103,18 +103,33 @@ export default function GalleryView({
   }, [hiddenCategories, selectedCategory]);
 
   useEffect(() => {
-    const current = selectedProject && filteredProjects.find((project) => project.id === selectedProject.id);
-    const next = current ?? filteredProjects[0] ?? null;
-    if (next?.id !== selectedProject?.id) {
-      setSelectedProject(next);
-      setActiveMedia(next ? projectMedia(next)[0] ?? null : null);
+    if (selectedProject?.id !== selectedProjectId) {
+      setSelectedProjectId(selectedProject?.id ?? null);
+      setActiveMediaSelection(null);
+      setSelectedRoomId(null);
+      setLightbox(null);
+      setActiveCraftsmanName(null);
+    }
+  }, [selectedProject?.id, selectedProjectId]);
+
+  useEffect(() => {
+    if (selectedRoomId && !selectedProject?.rooms?.some((room) => room.id === selectedRoomId)) {
       setSelectedRoomId(null);
     }
-  }, [filteredProjects, selectedProject]);
+    if (lightbox?.source === 'room' && !selectedProject?.rooms?.some((room) => room.id === lightbox.roomId)) {
+      setLightbox(null);
+    }
+  }, [lightbox?.roomId, lightbox?.source, selectedProject, selectedRoomId]);
+
+  useEffect(() => {
+    if (lightbox && lightboxImages.length === 0) {
+      setLightbox(null);
+    }
+  }, [lightbox, lightboxImages.length]);
 
   const selectProject = (project: Project) => {
-    setSelectedProject(project);
-    setActiveMedia(projectMedia(project)[0] ?? null);
+    setSelectedProjectId(project.id);
+    setActiveMediaSelection(null);
     setSelectedRoomId(null);
   };
 
@@ -150,7 +165,7 @@ export default function GalleryView({
   const changeProjectImage = (direction: -1 | 1) => {
     if (media.length === 0) return;
     const currentIndex = Math.max(0, media.findIndex((item) => item.key === activeMedia?.key));
-    setActiveMedia(media[(currentIndex + direction + media.length) % media.length]);
+    setActiveMediaSelection(mediaSelection(media[(currentIndex + direction + media.length) % media.length]));
   };
 
   const openCurrentImage = () => {
@@ -158,12 +173,12 @@ export default function GalleryView({
     if (activeMedia.type === 'room-image' && activeMedia.roomId) {
       const room = selectedProject.rooms?.find((item) => item.id === activeMedia.roomId);
       if (room) {
-        setLightbox({ images: room.images, activeIndex: activeMedia.imageIndex ?? 0, alt: room.name });
+        setLightbox({ source: 'room', roomId: room.id, activeIndex: activeMedia.imageIndex ?? 0, alt: room.name });
       }
       return;
     }
     const index = Math.max(0, media.findIndex((item) => item.key === activeMedia.key));
-    setLightbox({ images: media.map((item) => item.url), activeIndex: index, alt: selectedProject.title });
+    setLightbox({ source: 'project', activeIndex: index, alt: selectedProject.title });
   };
 
   const currentEditSelected = activeMedia
@@ -252,7 +267,7 @@ export default function GalleryView({
                       <button
                         key={item.key}
                         type="button"
-                        onClick={() => setActiveMedia(item)}
+                        onClick={() => setActiveMediaSelection(mediaSelection(item))}
                         aria-pressed={active}
                         className={`group relative aspect-[4/3] w-24 shrink-0 overflow-hidden rounded-[4px] border bg-studio-surface sm:w-28 ${active ? 'border-studio-brass' : 'border-studio-line opacity-70 hover:opacity-100'} ${editSelected ? 'ring-2 ring-studio-warning' : ''}`}
                       >
@@ -385,11 +400,11 @@ export default function GalleryView({
                             <p className="section-title">细节图片</p>
                             <div className="mt-3 grid grid-cols-2 gap-2">
                               {room.images.map((image, imageIndex) => {
-                                const item: ActiveMedia = {
+                                const item = {
                                   key: `room-${room.id}-${imageIndex}`,
                                   url: image,
                                   alt: `${room.name} 细节 ${imageIndex + 1}`,
-                                  type: 'room-image',
+                                  type: 'room-image' as const,
                                   roomId: room.id,
                                   imageIndex,
                                 };
@@ -397,7 +412,7 @@ export default function GalleryView({
                                 const editSelected = getIsSelected('room-image', { roomId: room.id, index: imageIndex });
                                 return (
                                   <div key={item.key} className="group relative">
-                                    <button type="button" onClick={() => setActiveMedia(item)} className={`aspect-[4/3] w-full overflow-hidden rounded-[4px] border bg-black ${active ? 'border-studio-brass' : 'border-studio-line'} ${editSelected ? 'ring-2 ring-studio-warning' : ''}`} aria-label={`在主视图查看 ${item.alt}`}>
+                                    <button type="button" onClick={() => setActiveMediaSelection(mediaSelection(item))} className={`aspect-[4/3] w-full overflow-hidden rounded-[4px] border bg-black ${active ? 'border-studio-brass' : 'border-studio-line'} ${editSelected ? 'ring-2 ring-studio-warning' : ''}`} aria-label={`在主视图查看 ${item.alt}`}>
                                       <SmartImage src={image} alt={item.alt} className="media-hover h-full w-full object-cover" referrerPolicy="no-referrer" loading="lazy" decoding="async" />
                                     </button>
                                     {isAdmin && (
@@ -450,11 +465,11 @@ export default function GalleryView({
         />
       )}
 
-      {lightbox && (
+      {lightbox && lightboxImages.length > 0 && (
         <MediaLightbox
-          images={lightbox.images}
+          images={lightboxImages}
           activeIndex={lightbox.activeIndex}
-          alt={lightbox.alt}
+          alt={lightboxAlt}
           onIndexChange={(activeIndex) => setLightbox((current) => current ? { ...current, activeIndex } : null)}
           onClose={() => setLightbox(null)}
         />

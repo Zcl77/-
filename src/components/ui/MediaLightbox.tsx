@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import SmartImage from './SmartImage';
 
 interface MediaLightboxProps {
   images: string[];
@@ -12,6 +13,16 @@ interface MediaLightboxProps {
 
 export default function MediaLightbox({ images, activeIndex, alt, onIndexChange, onClose }: MediaLightboxProps) {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const activeIndexRef = useRef(activeIndex);
+  const imagesRef = useRef(images);
+  const onIndexChangeRef = useRef(onIndexChange);
+  const onCloseRef = useRef(onClose);
+
+  activeIndexRef.current = activeIndex;
+  imagesRef.current = images;
+  onIndexChangeRef.current = onIndexChange;
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     const previousActive = document.activeElement as HTMLElement | null;
@@ -20,12 +31,37 @@ export default function MediaLightbox({ images, activeIndex, alt, onIndexChange,
     closeRef.current?.focus();
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-      if (event.key === 'ArrowLeft' && images.length > 1) {
-        onIndexChange((activeIndex - 1 + images.length) % images.length);
+      const currentImages = imagesRef.current;
+      const currentIndex = activeIndexRef.current;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCloseRef.current();
       }
-      if (event.key === 'ArrowRight' && images.length > 1) {
-        onIndexChange((activeIndex + 1) % images.length);
+      if (event.key === 'ArrowLeft' && currentImages.length > 1) {
+        event.preventDefault();
+        onIndexChangeRef.current((currentIndex - 1 + currentImages.length) % currentImages.length);
+      }
+      if (event.key === 'ArrowRight' && currentImages.length > 1) {
+        event.preventDefault();
+        onIndexChangeRef.current((currentIndex + 1) % currentImages.length);
+      }
+      if (event.key === 'Tab') {
+        const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? []);
+        if (focusable.length === 0) {
+          event.preventDefault();
+          return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && (document.activeElement === first || !dialogRef.current?.contains(document.activeElement))) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
       }
     };
 
@@ -35,13 +71,15 @@ export default function MediaLightbox({ images, activeIndex, alt, onIndexChange,
       window.removeEventListener('keydown', onKeyDown);
       previousActive?.focus();
     };
-  }, [activeIndex, images.length, onClose, onIndexChange]);
+  }, []);
 
   if (images.length === 0) return null;
-  const currentImage = images[Math.min(activeIndex, images.length - 1)];
+  const safeActiveIndex = Math.min(Math.max(activeIndex, 0), images.length - 1);
+  const currentImage = images[safeActiveIndex];
 
   return createPortal(
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-[300] flex items-center justify-center bg-black/90 p-3 md:p-8"
       role="dialog"
       aria-modal="true"
@@ -61,9 +99,16 @@ export default function MediaLightbox({ images, activeIndex, alt, onIndexChange,
       )}
 
       <figure className="flex h-full w-full max-w-[96rem] flex-col items-center justify-center gap-3">
-        <img src={currentImage} alt={alt} className="max-h-[86dvh] max-w-full object-contain" referrerPolicy="no-referrer" decoding="async" />
+        <SmartImage
+          src={currentImage}
+          alt={alt}
+          showFallbackText
+          className="max-h-[86dvh] min-h-40 w-full max-w-full object-contain"
+          referrerPolicy="no-referrer"
+          decoding="async"
+        />
         <figcaption className="text-xs text-studio-muted">
-          {alt}{images.length > 1 ? ` · ${activeIndex + 1} / ${images.length}` : ''}
+          {alt}{images.length > 1 ? ` · ${safeActiveIndex + 1} / ${images.length}` : ''}
         </figcaption>
       </figure>
 
