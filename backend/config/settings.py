@@ -7,6 +7,7 @@ from django.core.exceptions import ImproperlyConfigured
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+TESTING = "test" in sys.argv
 
 
 def env_bool(name: str, default: bool = False) -> bool:
@@ -39,6 +40,10 @@ INSTALLED_APPS = [
     "rest_framework",
     "common",
     "accounts",
+    "media_library",
+    "portfolio",
+    "projects",
+    "interactions",
 ]
 
 MIDDLEWARE = [
@@ -88,6 +93,9 @@ DATABASES = {
         },
     }
 }
+
+if TESTING and env_bool("DJANGO_TEST_SQLITE"):
+    DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}}
 
 AUTH_USER_MODEL = "accounts.User"
 AUTHENTICATION_BACKENDS = [
@@ -141,7 +149,6 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS
 DATA_UPLOAD_MAX_MEMORY_SIZE = 17 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 16 * 1024 * 1024
 
-TESTING = "test" in sys.argv
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache" if TESTING else "django.core.cache.backends.db.DatabaseCache",
