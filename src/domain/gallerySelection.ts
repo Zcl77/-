@@ -14,7 +14,10 @@ export interface GalleryMedia extends GalleryMediaSelection {
   alt: string;
 }
 
-export function resolveSelectedProject(projects: Project[], selectedProjectId: string | null): Project | null {
+export function resolveSelectedProject(
+  projects: Project[],
+  selectedProjectId: string | null,
+): Project | null {
   return projects.find((project) => project.id === selectedProjectId) ?? projects[0] ?? null;
 }
 
@@ -58,9 +61,13 @@ export function resolveGalleryMedia(
   }
 
   if (selection.type === 'project-image') {
-    return projectMedia.find((item) => (
-      item.type === 'project-image' && item.imageIndex === selection.imageIndex
-    )) ?? projectMedia[0] ?? null;
+    return (
+      projectMedia.find(
+        (item) => item.type === 'project-image' && item.imageIndex === selection.imageIndex,
+      ) ??
+      projectMedia[0] ??
+      null
+    );
   }
 
   const room = project.rooms?.find((item) => item.id === selection.roomId);

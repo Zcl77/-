@@ -8,30 +8,11 @@ import WIPTimeline from './components/WIPTimeline';
 import CustomerPortal from './components/account/CustomerPortal';
 import LoginPanel from './components/account/LoginPanel';
 import StatusNotice from './components/ui/StatusNotice';
+import { parseRoute } from './domain/routes';
 import { usePublicSiteData } from './hooks/usePublicSiteData';
 import { useRoute } from './hooks/useRoute';
 import { useSessionAuth } from './hooks/useSessionAuth';
 import { submitInquiry, submitReview } from './services/api/repositories';
-
-interface RouteState {
-  tab: AppTab;
-  workSlug: string | null;
-  projectId: string | null;
-  found: boolean;
-}
-
-function parseRoute(path: string): RouteState {
-  const pathname = path.split(/[?#]/)[0].replace(/\/+$/, '') || '/';
-  const workMatch = pathname.match(/^\/works\/([^/]+)$/);
-  const projectMatch = pathname.match(/^\/my-projects\/([0-9a-f-]+)$/i);
-  if (pathname === '/') return { tab: 'gallery', workSlug: null, projectId: null, found: true };
-  if (workMatch) return { tab: 'gallery', workSlug: decodeURIComponent(workMatch[1]), projectId: null, found: true };
-  if (pathname === '/process') return { tab: 'process', workSlug: null, projectId: null, found: true };
-  if (pathname === '/contact') return { tab: 'contact', workSlug: null, projectId: null, found: true };
-  if (pathname === '/login' || pathname === '/my-projects') return { tab: 'account', workSlug: null, projectId: null, found: true };
-  if (projectMatch) return { tab: 'account', workSlug: null, projectId: projectMatch[1], found: true };
-  return { tab: 'gallery', workSlug: null, projectId: null, found: false };
-}
 
 export default function App() {
   const { path, navigate } = useRoute();
@@ -63,32 +44,98 @@ export default function App() {
   const publicPage = () => {
     if (!route.found) return <NotFound onHome={() => navigate('/')} />;
     if (publicData.status === 'loading') {
-      return <PageStatus><StatusNotice tone="loading" title="正在读取网站内容" description="正在从本地 Django 服务读取公开作品、制作日志与已审核评价。" /></PageStatus>;
+      return (
+        <PageStatus>
+          <StatusNotice
+            tone="loading"
+            title="正在读取网站内容"
+            description="正在从本地 Django 服务读取公开作品、制作日志与已审核评价。"
+          />
+        </PageStatus>
+      );
     }
     if (publicData.status === 'error') {
-      return <PageStatus><StatusNotice tone="error" title="网站内容加载失败" description={publicData.error || undefined} action={<button type="button" onClick={() => void publicData.reload()} className="button-secondary"><RefreshCw className="h-4 w-4" />重新加载</button>} /></PageStatus>;
+      return (
+        <PageStatus>
+          <StatusNotice
+            tone="error"
+            title="网站内容加载失败"
+            description={publicData.error || undefined}
+            action={
+              <button type="button" onClick={() => void publicData.reload()} className="button-secondary">
+                <RefreshCw className="h-4 w-4" />
+                重新加载
+              </button>
+            }
+          />
+        </PageStatus>
+      );
     }
     if (route.tab === 'gallery') {
       if (route.workSlug && !publicData.projects.some((project) => project.slug === route.workSlug)) {
         return <NotFound title="作品不存在或尚未公开" onHome={() => navigate('/')} />;
       }
-      return <GalleryView projects={publicData.projects} categories={publicData.categories} selectedProjectSlug={route.workSlug} onProjectChange={(project) => navigate(`/works/${project.slug}`)} onCategoryChange={() => navigate('/')} />;
+      return (
+        <GalleryView
+          projects={publicData.projects}
+          categories={publicData.categories}
+          selectedProjectSlug={route.workSlug}
+          onProjectChange={(project) => navigate(`/works/${project.slug}`)}
+          onCategoryChange={() => navigate('/')}
+        />
+      );
     }
-    if (route.tab === 'process') return <WIPTimeline posts={publicData.processPosts} onOpenWork={(slug) => navigate(`/works/${slug}`)} />;
-    return <CommissionForm projects={publicData.projects} reviews={publicData.reviews} site={publicData.site} onAddReview={submitReview} onSubmitInquiry={submitInquiry} onRefresh={publicData.reload} />;
+    if (route.tab === 'process')
+      return (
+        <WIPTimeline posts={publicData.processPosts} onOpenWork={(slug) => navigate(`/works/${slug}`)} />
+      );
+    return (
+      <CommissionForm
+        projects={publicData.projects}
+        reviews={publicData.reviews}
+        site={publicData.site}
+        onAddReview={submitReview}
+        onSubmitInquiry={submitInquiry}
+        onRefresh={publicData.reload}
+      />
+    );
   };
 
   const accountPage = () => {
-    if (auth.status === 'loading') return <PageStatus><StatusNotice tone="loading" title="正在检查登录状态" description="正在恢复安全会话。" /></PageStatus>;
-    if (auth.status === 'error' && !auth.user.authenticated) return <PageStatus><StatusNotice tone="error" title="登录服务暂时不可用" description={auth.error || undefined} action={<button type="button" onClick={() => void auth.refresh()} className="button-secondary"><RefreshCw className="h-4 w-4" />重试</button>} /></PageStatus>;
-    if (!auth.user.authenticated) return <LoginPanel onLogin={auth.login} onCustomerLogin={() => navigate('/my-projects', true)} />;
+    if (auth.status === 'loading')
+      return (
+        <PageStatus>
+          <StatusNotice tone="loading" title="正在检查登录状态" description="正在恢复安全会话。" />
+        </PageStatus>
+      );
+    if (auth.status === 'error' && !auth.user.authenticated)
+      return (
+        <PageStatus>
+          <StatusNotice
+            tone="error"
+            title="登录服务暂时不可用"
+            description={auth.error || undefined}
+            action={
+              <button type="button" onClick={() => void auth.refresh()} className="button-secondary">
+                <RefreshCw className="h-4 w-4" />
+                重试
+              </button>
+            }
+          />
+        </PageStatus>
+      );
+    if (!auth.user.authenticated)
+      return <LoginPanel onLogin={auth.login} onCustomerLogin={() => navigate('/my-projects', true)} />;
     return (
       <CustomerPortal
         user={auth.user}
         selectedProjectId={route.projectId}
         onOpenProject={(projectId) => navigate(`/my-projects/${projectId}`)}
         onBackToProjects={() => navigate('/my-projects')}
-        onLogout={async () => { await auth.logout(); navigate('/login', true); }}
+        onLogout={async () => {
+          await auth.logout();
+          navigate('/login', true);
+        }}
         onChangePassword={auth.changePassword}
       />
     );
@@ -100,7 +147,12 @@ export default function App() {
         <Sidebar activeTab={route.tab} onNavigate={navigateTab} accountLabel={accountLabel} />
         <div className="min-h-dvh pb-[4.5rem] pt-14 lg:pb-0 lg:pl-28 lg:pt-0">
           <AnimatePresence mode="wait" initial={false}>
-            <motion.div key={`${route.tab}-${route.workSlug || route.projectId || ''}`} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -3 }}>
+            <motion.div
+              key={`${route.tab}-${route.workSlug || route.projectId || ''}`}
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -3 }}
+            >
               {route.tab === 'account' ? accountPage() : publicPage()}
             </motion.div>
           </AnimatePresence>
@@ -111,9 +163,27 @@ export default function App() {
 }
 
 function PageStatus({ children }: { children: React.ReactNode }) {
-  return <main className="page-shell"><div className="page-inner">{children}</div></main>;
+  return (
+    <main className="page-shell">
+      <div className="page-inner">{children}</div>
+    </main>
+  );
 }
 
 function NotFound({ title = '页面不存在', onHome }: { title?: string; onHome: () => void }) {
-  return <PageStatus><StatusNotice tone="empty" title={title} description="链接可能已经变更，或内容当前不可公开访问。" action={<button type="button" onClick={onHome} className="button-secondary"><ArrowLeft className="h-4 w-4" />返回作品展厅</button>} /></PageStatus>;
+  return (
+    <PageStatus>
+      <StatusNotice
+        tone="empty"
+        title={title}
+        description="链接可能已经变更，或内容当前不可公开访问。"
+        action={
+          <button type="button" onClick={onHome} className="button-secondary">
+            <ArrowLeft className="h-4 w-4" />
+            返回作品展厅
+          </button>
+        }
+      />
+    </PageStatus>
+  );
 }

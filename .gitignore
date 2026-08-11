@@ -11,7 +11,7 @@ build/
 dist/
 coverage/
 artifacts/
-.firebase/
+backups/
 .DS_Store
 *.log
 .env*

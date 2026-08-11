@@ -11,7 +11,13 @@ interface MediaLightboxProps {
   onClose: () => void;
 }
 
-export default function MediaLightbox({ images, activeIndex, alt, onIndexChange, onClose }: MediaLightboxProps) {
+export default function MediaLightbox({
+  images,
+  activeIndex,
+  alt,
+  onIndexChange,
+  onClose,
+}: MediaLightboxProps) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const activeIndexRef = useRef(activeIndex);
@@ -19,10 +25,12 @@ export default function MediaLightbox({ images, activeIndex, alt, onIndexChange,
   const onIndexChangeRef = useRef(onIndexChange);
   const onCloseRef = useRef(onClose);
 
-  activeIndexRef.current = activeIndex;
-  imagesRef.current = images;
-  onIndexChangeRef.current = onIndexChange;
-  onCloseRef.current = onClose;
+  useEffect(() => {
+    activeIndexRef.current = activeIndex;
+    imagesRef.current = images;
+    onIndexChangeRef.current = onIndexChange;
+    onCloseRef.current = onClose;
+  }, [activeIndex, images, onClose, onIndexChange]);
 
   useEffect(() => {
     const previousActive = document.activeElement as HTMLElement | null;
@@ -46,16 +54,21 @@ export default function MediaLightbox({ images, activeIndex, alt, onIndexChange,
         onIndexChangeRef.current((currentIndex + 1) % currentImages.length);
       }
       if (event.key === 'Tab') {
-        const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ) ?? []);
+        const focusable = Array.from(
+          dialogRef.current?.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          ) ?? [],
+        );
         if (focusable.length === 0) {
           event.preventDefault();
           return;
         }
         const first = focusable[0];
         const last = focusable[focusable.length - 1];
-        if (event.shiftKey && (document.activeElement === first || !dialogRef.current?.contains(document.activeElement))) {
+        if (
+          event.shiftKey &&
+          (document.activeElement === first || !dialogRef.current?.contains(document.activeElement))
+        ) {
           event.preventDefault();
           last.focus();
         } else if (!event.shiftKey && document.activeElement === last) {
@@ -88,12 +101,25 @@ export default function MediaLightbox({ images, activeIndex, alt, onIndexChange,
         if (event.currentTarget === event.target) onClose();
       }}
     >
-      <button ref={closeRef} type="button" onClick={onClose} className="icon-button absolute right-4 top-4 z-10" title="关闭图片预览" aria-label="关闭图片预览">
+      <button
+        ref={closeRef}
+        type="button"
+        onClick={onClose}
+        className="icon-button absolute right-4 top-4 z-10"
+        title="关闭图片预览"
+        aria-label="关闭图片预览"
+      >
         <X className="h-5 w-5" />
       </button>
 
       {images.length > 1 && (
-        <button type="button" onClick={() => onIndexChange((activeIndex - 1 + images.length) % images.length)} className="icon-button absolute left-3 top-1/2 z-10 -translate-y-1/2 md:left-6" title="上一张" aria-label="上一张图片">
+        <button
+          type="button"
+          onClick={() => onIndexChange((activeIndex - 1 + images.length) % images.length)}
+          className="icon-button absolute left-3 top-1/2 z-10 -translate-y-1/2 md:left-6"
+          title="上一张"
+          aria-label="上一张图片"
+        >
           <ChevronLeft className="h-5 w-5" />
         </button>
       )}
@@ -108,12 +134,19 @@ export default function MediaLightbox({ images, activeIndex, alt, onIndexChange,
           decoding="async"
         />
         <figcaption className="text-xs text-studio-muted">
-          {alt}{images.length > 1 ? ` · ${safeActiveIndex + 1} / ${images.length}` : ''}
+          {alt}
+          {images.length > 1 ? ` · ${safeActiveIndex + 1} / ${images.length}` : ''}
         </figcaption>
       </figure>
 
       {images.length > 1 && (
-        <button type="button" onClick={() => onIndexChange((activeIndex + 1) % images.length)} className="icon-button absolute right-3 top-1/2 z-10 -translate-y-1/2 md:right-6" title="下一张" aria-label="下一张图片">
+        <button
+          type="button"
+          onClick={() => onIndexChange((activeIndex + 1) % images.length)}
+          className="icon-button absolute right-3 top-1/2 z-10 -translate-y-1/2 md:right-6"
+          title="下一张"
+          aria-label="下一张图片"
+        >
           <ChevronRight className="h-5 w-5" />
         </button>
       )}

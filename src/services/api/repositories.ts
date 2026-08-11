@@ -169,16 +169,21 @@ interface RawMessage {
 
 function workRooms(images: RawWorkImage[]): RoomDetail[] {
   const grouped = new Map<string, RawWorkImage[]>();
-  images.filter((image) => image.kind === 'room').forEach((image) => {
-    const name = image.room_name || '空间细节';
-    grouped.set(name, [...(grouped.get(name) || []), image]);
-  });
+  images
+    .filter((image) => image.kind === 'room')
+    .forEach((image) => {
+      const name = image.room_name || '空间细节';
+      grouped.set(name, [...(grouped.get(name) || []), image]);
+    });
   return Array.from(grouped.entries()).map(([name, roomImages]) => ({
     id: `${name}-${roomImages[0].id}`,
     name,
     coverUrl: roomImages[0].media.displayUrl,
     images: roomImages.map((image) => image.media.displayUrl),
-    description: roomImages.map((image) => image.caption).filter(Boolean).join('\n'),
+    description: roomImages
+      .map((image) => image.caption)
+      .filter(Boolean)
+      .join('\n'),
   }));
 }
 
@@ -204,7 +209,10 @@ function mapWork(work: RawWork): Project {
     dimensions: work.dimensions || undefined,
     materials: work.materials || undefined,
     period: work.period || undefined,
-    authors: work.authors.split(/[，,]/).map((name) => name.trim()).filter(Boolean),
+    authors: work.authors
+      .split(/[，,]/)
+      .map((name) => name.trim())
+      .filter(Boolean),
     rooms: workRooms(work.images),
     isDemo: Boolean(work.is_dev_data),
   };
@@ -280,27 +288,33 @@ export async function getPublicSiteData() {
     } satisfies SiteInfo,
     categories: categories.map((category) => category.name),
     projects: works.map(mapWork),
-    processPosts: processPosts.map((post) => ({
-      id: post.id,
-      title: post.title,
-      slug: post.slug,
-      summary: post.summary,
-      body: post.body,
-      publishedAt: post.published_at,
-      work: post.work,
-      images: post.images,
-      isDevData: Boolean(post.is_dev_data),
-    } satisfies PublicProcessPost)),
-    reviews: reviews.map((review) => ({
-      id: review.id,
-      reviewerName: review.reviewer_name,
-      projectName: review.project_name,
-      rating: review.rating,
-      comment: review.comment,
-      createdAt: review.created_at,
-      status: 'approved',
-      isDemo: Boolean(review.is_dev_data),
-    } satisfies Review)),
+    processPosts: processPosts.map(
+      (post) =>
+        ({
+          id: post.id,
+          title: post.title,
+          slug: post.slug,
+          summary: post.summary,
+          body: post.body,
+          publishedAt: post.published_at,
+          work: post.work,
+          images: post.images,
+          isDevData: Boolean(post.is_dev_data),
+        }) satisfies PublicProcessPost,
+    ),
+    reviews: reviews.map(
+      (review) =>
+        ({
+          id: review.id,
+          reviewerName: review.reviewer_name,
+          projectName: review.project_name,
+          rating: review.rating,
+          comment: review.comment,
+          createdAt: review.created_at,
+          status: 'approved',
+          isDemo: Boolean(review.is_dev_data),
+        }) satisfies Review,
+    ),
   };
 }
 
@@ -312,6 +326,7 @@ export async function submitReview(input: ReviewInput): Promise<string> {
       rating: input.rating,
       project_name: input.projectName,
       comment: input.comment,
+      ...(input.workSlug ? { work_slug: input.workSlug } : {}),
     }),
   });
   return response.id;

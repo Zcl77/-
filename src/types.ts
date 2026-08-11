@@ -3,15 +3,6 @@ export type ProjectCategory = string;
 export type ProjectVisibility = 'public' | 'hidden';
 export type ReviewStatus = 'pending' | 'approved' | 'rejected';
 
-export interface StoredImage {
-  url: string;
-  path: string;
-  contentType: string;
-  size: number;
-  originalName: string;
-  uploadedAt: string;
-}
-
 export interface WorkStep {
   id: string;
   name: string;
@@ -51,7 +42,6 @@ export interface Project {
   inspiration?: string;
   authors?: string[];
   rooms?: RoomDetail[];
-  imageAssets?: StoredImage[];
   isDemo?: boolean;
 }
 
@@ -73,27 +63,7 @@ export interface ReviewInput {
   rating: number;
   projectName: string;
   comment: string;
-}
-
-export interface CraftsmanProfile {
-  name: string;
-  wechatId?: string;
-  wechatQr?: string;
-  wechatQrAsset?: StoredImage;
-}
-
-export interface StudioSettings {
-  wechatId: string;
-  wechatQrUrl: string;
-  wechatQrAsset?: StoredImage;
-}
-
-export interface ImageEditContext {
-  type: 'project-cover' | 'project-image' | 'room-cover' | 'room-image' | 'craftsman-qr' | 'master-qr';
-  projectId?: string;
-  imageIndex?: number;
-  roomId?: string;
-  craftsmanName?: string;
+  workSlug?: string;
 }
 
 export type AsyncState = 'idle' | 'working' | 'success' | 'error';

@@ -25,7 +25,9 @@ export function useSessionAuth() {
     }
   }, []);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   const login = useCallback(async (username: string, password: string) => {
     const result = await requestLogin(username, password);

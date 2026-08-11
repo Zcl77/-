@@ -13,13 +13,19 @@ interface WIPTimelineProps {
 
 function formatDate(value: string | null) {
   if (!value) return '日期待补充';
-  return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value));
+  return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(
+    new Date(value),
+  );
 }
 
 export default function WIPTimeline({ posts, onOpenWork }: WIPTimelineProps) {
-  const sortedPosts = useMemo(() => [...posts].sort((a, b) => (
-    new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime()
-  )), [posts]);
+  const sortedPosts = useMemo(
+    () =>
+      [...posts].sort(
+        (a, b) => new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime(),
+      ),
+    [posts],
+  );
   const [selectedId, setSelectedId] = useState(sortedPosts[0]?.id || '');
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const selected = sortedPosts.find((post) => post.id === selectedId) || sortedPosts[0];
@@ -29,7 +35,9 @@ export default function WIPTimeline({ posts, onOpenWork }: WIPTimelineProps) {
     if (!sortedPosts.some((post) => post.id === selectedId)) setSelectedId(sortedPosts[0]?.id || '');
   }, [selectedId, sortedPosts]);
 
-  useEffect(() => { setLightboxIndex(null); }, [selected?.id]);
+  useEffect(() => {
+    setLightboxIndex(null);
+  }, [selected?.id]);
 
   return (
     <div className="page-shell">
@@ -37,24 +45,49 @@ export default function WIPTimeline({ posts, onOpenWork }: WIPTimelineProps) {
         <header className="border-b border-studio-line pb-6 md:pb-8">
           <span className="page-kicker">Public making journal</span>
           <h1 className="page-title mt-2">公开制作日志</h1>
-          <p className="page-description mt-3">记录可以公开分享的工艺、材料与制作过程。客户订单的私人进度只在登录后的“我的项目”中显示。</p>
+          <p className="page-description mt-3">
+            记录可以公开分享的工艺、材料与制作过程。客户订单的私人进度只在登录后的“我的项目”中显示。
+          </p>
         </header>
 
         {!selected ? (
-          <StatusNotice tone="empty" title="尚无公开制作日志" description="工作室发布真实过程记录后会显示在这里；不会用虚构进度填充页面。" className="mt-7" />
+          <StatusNotice
+            tone="empty"
+            title="尚无公开制作日志"
+            description="工作室发布真实过程记录后会显示在这里；不会用虚构进度填充页面。"
+            className="mt-7"
+          />
         ) : (
           <div className="mt-7 grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-10 xl:gap-14">
             <aside className="order-2 lg:order-1 lg:col-span-4" aria-label="制作日志索引">
               <div className="lg:sticky lg:top-8">
-                <div className="flex items-center justify-between border-b border-studio-line pb-3"><h2 className="section-title">日志索引</h2><span className="text-[10px] text-studio-faint">{sortedPosts.length} 篇</span></div>
+                <div className="flex items-center justify-between border-b border-studio-line pb-3">
+                  <h2 className="section-title">日志索引</h2>
+                  <span className="text-[10px] text-studio-faint">{sortedPosts.length} 篇</span>
+                </div>
                 <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
                   {sortedPosts.map((post) => {
                     const active = post.id === selected.id;
                     return (
-                      <button key={post.id} type="button" onClick={() => setSelectedId(post.id)} aria-pressed={active} className={`rounded-[6px] border p-4 text-left transition-colors duration-200 ${active ? 'border-studio-brass bg-studio-raised' : 'border-studio-line bg-studio-surface hover:border-studio-faint'}`}>
-                        <span className="flex items-center gap-2 text-[10px] text-studio-faint"><CalendarDays className="h-3.5 w-3.5" />{formatDate(post.publishedAt)}</span>
-                        <strong className="mt-2 block font-serif text-sm leading-6 text-studio-ink">{post.title}</strong>
-                        {post.summary && <span className="mt-2 line-clamp-2 block text-xs leading-5 text-studio-muted">{post.summary}</span>}
+                      <button
+                        key={post.id}
+                        type="button"
+                        onClick={() => setSelectedId(post.id)}
+                        aria-pressed={active}
+                        className={`rounded-[6px] border p-4 text-left transition-colors duration-200 ${active ? 'border-studio-brass bg-studio-raised' : 'border-studio-line bg-studio-surface hover:border-studio-faint'}`}
+                      >
+                        <span className="flex items-center gap-2 text-[10px] text-studio-faint">
+                          <CalendarDays className="h-3.5 w-3.5" />
+                          {formatDate(post.publishedAt)}
+                        </span>
+                        <strong className="mt-2 block font-serif text-sm leading-6 text-studio-ink">
+                          {post.title}
+                        </strong>
+                        {post.summary && (
+                          <span className="mt-2 line-clamp-2 block text-xs leading-5 text-studio-muted">
+                            {post.summary}
+                          </span>
+                        )}
                       </button>
                     );
                   })}
@@ -64,30 +97,82 @@ export default function WIPTimeline({ posts, onOpenWork }: WIPTimelineProps) {
 
             <div className="order-1 min-w-0 lg:order-2 lg:col-span-8">
               <AnimatePresence mode="wait" initial={false}>
-                <motion.article key={selected.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}>
+                <motion.article
+                  key={selected.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                >
                   {images.length > 0 ? (
-                    <button type="button" onClick={() => setLightboxIndex(0)} className="group flex aspect-[16/10] w-full items-center justify-center overflow-hidden rounded-[6px] border border-studio-line bg-black" aria-label={`放大查看 ${selected.title} 图片`}>
-                      <SmartImage src={images[0]} alt={selected.images[0].altText} showFallbackText className="media-hover h-full w-full object-contain" decoding="async" fetchPriority="high" />
+                    <button
+                      type="button"
+                      onClick={() => setLightboxIndex(0)}
+                      className="group flex aspect-[16/10] w-full items-center justify-center overflow-hidden rounded-[6px] border border-studio-line bg-black"
+                      aria-label={`放大查看 ${selected.title} 图片`}
+                    >
+                      <SmartImage
+                        src={images[0]}
+                        alt={selected.images[0].altText}
+                        showFallbackText
+                        className="media-hover h-full w-full object-contain"
+                        decoding="async"
+                        fetchPriority="high"
+                      />
                     </button>
                   ) : (
-                    <div className="flex min-h-48 items-center justify-center rounded-[6px] border border-studio-line bg-studio-surface text-xs text-studio-muted"><Images className="mr-2 h-4 w-4" />本篇日志未附过程图片</div>
+                    <div className="flex min-h-48 items-center justify-center rounded-[6px] border border-studio-line bg-studio-surface text-xs text-studio-muted">
+                      <Images className="mr-2 h-4 w-4" />
+                      本篇日志未附过程图片
+                    </div>
                   )}
 
                   <div className="mt-6 border-b border-studio-line pb-6">
-                    <div className="flex flex-wrap items-center gap-2"><span className="tag">{formatDate(selected.publishedAt)}</span>{selected.isDevData && <span className="tag border-studio-warning/40 text-studio-warning">本地开发数据</span>}</div>
-                    <h2 className="mt-3 font-serif text-2xl font-semibold leading-snug text-studio-ink md:text-3xl">{selected.title}</h2>
-                    {selected.summary && <p className="mt-3 text-sm leading-7 text-studio-muted">{selected.summary}</p>}
-                    {selected.work && <button type="button" onClick={() => onOpenWork(selected.work!.slug)} className="button-quiet mt-4"><Link2 className="h-4 w-4" />查看关联作品：{selected.work.title}</button>}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="tag">{formatDate(selected.publishedAt)}</span>
+                      {selected.isDevData && (
+                        <span className="tag border-studio-warning/40 text-studio-warning">本地开发数据</span>
+                      )}
+                    </div>
+                    <h2 className="mt-3 font-serif text-2xl font-semibold leading-snug text-studio-ink md:text-3xl">
+                      {selected.title}
+                    </h2>
+                    {selected.summary && (
+                      <p className="mt-3 text-sm leading-7 text-studio-muted">{selected.summary}</p>
+                    )}
+                    {selected.work && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenWork(selected.work!.slug)}
+                        className="button-quiet mt-4"
+                      >
+                        <Link2 className="h-4 w-4" />
+                        查看关联作品：{selected.work.title}
+                      </button>
+                    )}
                   </div>
 
-                  <div className="mt-7 max-w-[46rem] whitespace-pre-wrap text-sm leading-8 text-studio-muted">{selected.body}</div>
+                  <div className="mt-7 max-w-[46rem] whitespace-pre-wrap text-sm leading-8 text-studio-muted">
+                    {selected.body}
+                  </div>
 
                   {selected.images.length > 1 && (
                     <section className="mt-10 border-t border-studio-line pt-7" aria-label="过程图片">
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                         {selected.images.map((image, index) => (
-                          <button key={image.id} type="button" onClick={() => setLightboxIndex(index)} className="group aspect-[4/3] overflow-hidden rounded-[4px] border border-studio-line bg-black" aria-label={`放大查看 ${image.altText}`}>
-                            <SmartImage src={image.media.thumbnailUrl} alt={image.altText} className="media-hover h-full w-full object-cover" loading="lazy" decoding="async" />
+                          <button
+                            key={image.id}
+                            type="button"
+                            onClick={() => setLightboxIndex(index)}
+                            className="group aspect-[4/3] overflow-hidden rounded-[4px] border border-studio-line bg-black"
+                            aria-label={`放大查看 ${image.altText}`}
+                          >
+                            <SmartImage
+                              src={image.media.thumbnailUrl}
+                              alt={image.altText}
+                              className="media-hover h-full w-full object-cover"
+                              loading="lazy"
+                              decoding="async"
+                            />
                           </button>
                         ))}
                       </div>
@@ -101,7 +186,13 @@ export default function WIPTimeline({ posts, onOpenWork }: WIPTimelineProps) {
       </div>
 
       {selected && lightboxIndex !== null && images.length > 0 && (
-        <MediaLightbox images={images} activeIndex={lightboxIndex} alt={selected.title} onIndexChange={setLightboxIndex} onClose={() => setLightboxIndex(null)} />
+        <MediaLightbox
+          images={images}
+          activeIndex={lightboxIndex}
+          alt={selected.title}
+          onIndexChange={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
       )}
     </div>
   );

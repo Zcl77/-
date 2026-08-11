@@ -13,12 +13,12 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_0900_ai_ci
     ports:
-      - "127.0.0.1:${MYSQL_HOST_PORT:-3307}:3306"
+      - '127.0.0.1:${MYSQL_HOST_PORT:-3307}:3306'
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/zhixing.cnf:/etc/mysql/conf.d/zhixing.cnf:ro
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent']
       interval: 5s
       timeout: 5s
       retries: 30
@@ -38,9 +38,9 @@ services:
       MYSQL_PORT: 3306
       DJANGO_MEDIA_ROOT: /data/media
       DJANGO_STATIC_ROOT: /data/static
-    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    command: ['python', 'manage.py', 'runserver', '0.0.0.0:8000']
     ports:
-      - "127.0.0.1:8000:8000"
+      - '127.0.0.1:8000:8000'
     volumes:
       - ./backend:/app
       - media_data:/data/media
@@ -49,7 +49,13 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"]
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)",
+        ]
       interval: 10s
       timeout: 5s
       retries: 15
@@ -65,9 +71,9 @@ services:
     environment:
       VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
       VITE_BACKEND_PROXY: http://backend:8000
-    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
+    command: ['npm', 'run', 'dev', '--', '--host', '0.0.0.0', '--port', '3000']
     ports:
-      - "127.0.0.1:3000:3000"
+      - '127.0.0.1:3000:3000'
     volumes:
       - .:/app
       - frontend_node_modules:/app/node_modules

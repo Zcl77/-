@@ -3,8 +3,8 @@
 .env
 .env.*
 !.env.example
-.firebase
 artifacts
+backups
 backend/**/__pycache__
 backend/**/*.pyc
 coverage

@@ -46,7 +46,7 @@ async function csrfToken(): Promise<string> {
     headers: { Accept: 'application/json' },
   });
   if (!response.ok) throw new ApiError('无法建立安全会话，请刷新页面后重试。', response.status);
-  const payload = await response.json() as { csrfToken: string };
+  const payload = (await response.json()) as { csrfToken: string };
   return readCookie('csrftoken') || payload.csrfToken;
 }
 
@@ -71,7 +71,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   if (response.status === 204) return undefined as T;
   const contentType = response.headers.get('content-type') || '';
   const payload = contentType.includes('application/json')
-    ? await response.json() as T & ErrorEnvelope
+    ? ((await response.json()) as T & ErrorEnvelope)
     : null;
   if (!response.ok) {
     throw new ApiError(

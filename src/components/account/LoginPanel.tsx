@@ -35,21 +35,32 @@ export default function LoginPanel({ onLogin, onCustomerLogin }: LoginPanelProps
   return (
     <div className="page-shell">
       <div className="page-inner flex min-h-[calc(100dvh-4.5rem)] items-center py-10 lg:min-h-dvh">
-        <section className="mx-auto w-full max-w-md border-y border-studio-line py-8" aria-labelledby="customer-login-title">
+        <section
+          className="mx-auto w-full max-w-md border-y border-studio-line py-8"
+          aria-labelledby="customer-login-title"
+        >
           <span className="page-kicker">Private project access</span>
-          <h1 id="customer-login-title" className="page-title mt-2">客户项目登录</h1>
-          <p className="page-description mt-3">登录后只显示工作室明确绑定给您的订单、制作阶段、私人图片和留言。</p>
+          <h1 id="customer-login-title" className="page-title mt-2">
+            客户项目登录
+          </h1>
+          <p className="page-description mt-3">
+            登录后只显示工作室明确绑定给您的订单、制作阶段、私人图片和留言。
+          </p>
 
           <div className="mt-6 flex gap-3 border-l border-studio-line pl-4 text-xs leading-6 text-studio-muted">
             <ShieldCheck className="mt-1 h-4 w-4 shrink-0 text-studio-brass" aria-hidden="true" />
             <p>账号由工作室创建并线下交付。本站不使用 Google 登录，也不会在浏览器长期保存登录令牌。</p>
           </div>
 
-          {error && <StatusNotice tone="error" compact title="登录未完成" description={error} className="mt-6" />}
+          {error && (
+            <StatusNotice tone="error" compact title="登录未完成" description={error} className="mt-6" />
+          )}
 
           <form onSubmit={submit} className="mt-7 space-y-5">
             <div>
-              <label htmlFor="login-username" className="field-label">用户名</label>
+              <label htmlFor="login-username" className="field-label">
+                用户名
+              </label>
               <input
                 id="login-username"
                 name="username"
@@ -62,7 +73,9 @@ export default function LoginPanel({ onLogin, onCustomerLogin }: LoginPanelProps
               />
             </div>
             <div>
-              <label htmlFor="login-password" className="field-label">密码</label>
+              <label htmlFor="login-password" className="field-label">
+                密码
+              </label>
               <input
                 id="login-password"
                 name="password"

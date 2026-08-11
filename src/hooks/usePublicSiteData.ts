@@ -53,7 +53,9 @@ export function usePublicSiteData() {
 
   useEffect(() => {
     void reload();
-    return () => { requestVersion.current += 1; };
+    return () => {
+      requestVersion.current += 1;
+    };
   }, [reload]);
 
   return { ...data, status, error, reload };
