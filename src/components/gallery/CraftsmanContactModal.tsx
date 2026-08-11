@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, Copy, QrCode, Upload, X } from 'lucide-react';
 import { CraftsmanProfile, ImageEditContext } from '../../types';
+import StatusNotice from '../ui/StatusNotice';
 
 interface CraftsmanContactModalProps {
   name: string;
@@ -29,8 +30,25 @@ export default function CraftsmanContactModal({
   const [isCopied, setIsCopied] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const wechatId = profile?.wechatId ?? '';
   const wechatQr = profile?.wechatQr ?? '';
+
+  useEffect(() => {
+    const previousActive = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    closeRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+      previousActive?.focus();
+    };
+  }, [onClose]);
 
   const copyWechatId = async () => {
     if (!wechatId) return;
@@ -80,42 +98,44 @@ export default function CraftsmanContactModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center z-[100] p-4 animate-fade-in text-gf-wood font-sans">
-      <div className="bg-gf-rice border border-gf-sand p-6 rounded shadow-2xl max-w-sm w-full relative space-y-4 text-left">
-        <button type="button" onClick={onClose} className="absolute top-4 right-4 text-gf-tea hover:text-gf-wood transition-colors cursor-pointer" title="关闭">
-          <X className="w-5 h-5" />
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/85 p-4" role="dialog" aria-modal="true" aria-labelledby="craftsman-contact-title" onMouseDown={(event) => {
+      if (event.currentTarget === event.target) onClose();
+    }}>
+      <div className="relative max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-[6px] border border-studio-line bg-studio-surface p-5 shadow-[var(--shadow-float)] md:p-6">
+        <button ref={closeRef} type="button" onClick={onClose} className="icon-button absolute right-4 top-4" title="关闭" aria-label="关闭成员联系信息">
+          <X className="h-4 w-4" />
         </button>
 
-        <div className="border-b border-gf-tea/20 pb-3">
-          <span className="text-[10px] uppercase tracking-widest text-gf-tea block font-mono font-bold">筑造成员 Signature Panel</span>
-          <h3 className="text-xl font-serif text-gf-wood font-bold mt-1">参与成员：{name}</h3>
-          <p className="text-[11px] text-gf-tea/80 mt-0.5 font-light">项目参与成员联络信息</p>
+        <div className="border-b border-studio-line pb-4 pr-12">
+          <span className="page-kicker">Craftsman contact</span>
+          <h3 id="craftsman-contact-title" className="mt-2 font-serif text-xl font-semibold text-studio-ink">{name}</h3>
+          <p className="mt-1 text-xs text-studio-muted">项目参与成员联络信息</p>
         </div>
 
-        {message && <div className="p-2.5 bg-white/70 border border-gf-tea/20 text-xs rounded">{message}</div>}
+        {message && <StatusNotice compact title={message} className="mt-5" />}
 
-        <div className="space-y-2">
-          <span className="text-[9px] uppercase tracking-wider text-gf-wood font-mono block">微信二维码 WeChat QR Code</span>
+        <div className="mt-5">
+          <span className="field-label">微信二维码</span>
           <button
             type="button"
             onClick={() => isAdmin && onSelectForEdit()}
-            className={`aspect-square w-44 mx-auto border rounded relative overflow-hidden flex flex-col items-center justify-center bg-white ${isAdmin ? 'cursor-pointer hover:border-amber-500 hover:ring-2 hover:ring-amber-200' : ''} ${isSelectedForEdit ? 'border-amber-500 ring-4 ring-amber-400/30' : 'border-gf-tea/15'}`}
+            className={`relative mx-auto flex aspect-square w-44 flex-col items-center justify-center overflow-hidden rounded-[4px] border bg-studio-paper ${isAdmin ? 'cursor-pointer hover:border-studio-warning' : ''} ${isSelectedForEdit ? 'border-studio-warning ring-2 ring-studio-warning/50' : 'border-studio-line'}`}
           >
             {wechatQr ? (
-              <img src={wechatQr} alt={`${name} 微信二维码`} className="w-full h-full object-contain p-2" referrerPolicy="no-referrer" />
+              <img src={wechatQr} alt={`${name} 微信二维码`} className="h-full w-full object-contain p-2" referrerPolicy="no-referrer" loading="lazy" decoding="async" />
             ) : (
-              <span className="text-center p-4">
-                <QrCode className="w-12 h-12 text-gf-tea/40 mx-auto mb-1" />
-                <span className="text-[10px] text-gf-tea/60 block font-mono">暂无二维码图片</span>
+              <span className="p-4 text-center">
+                <QrCode className="mx-auto mb-2 h-10 w-10 text-studio-paper-ink/40" />
+                <span className="block text-[10px] text-studio-paper-ink/60">暂无二维码图片</span>
               </span>
             )}
-            {isAdmin && <span className="absolute inset-x-0 bottom-0 bg-stone-900/95 text-[10px] text-gf-sand py-1 text-center">{isSelectedForEdit ? '已选中为替换目标' : '点击选择替换目标'}</span>}
+            {isAdmin && <span className="absolute inset-x-0 bottom-0 bg-studio-canvas/95 py-1.5 text-center text-[10px] text-studio-ink">{isSelectedForEdit ? '已选中替换目标' : '点击选择替换目标'}</span>}
           </button>
 
           {isAdmin && (
-            <div className="flex justify-center pt-1.5">
-              <label className="flex items-center gap-1.5 px-3 py-1 bg-gf-wood text-gf-rice rounded text-[10px] cursor-pointer transition-colors shadow-xs">
-                <Upload className="w-3.5 h-3.5" /> 选择并上传
+            <div className="flex justify-center pt-3">
+              <label className="button-secondary cursor-pointer">
+                <Upload className="h-4 w-4" /> 选择并上传
                 <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" disabled={busy} className="hidden" onChange={(event) => {
                   const file = event.target.files?.[0];
                   if (file) void uploadQr(file);
@@ -126,8 +146,8 @@ export default function CraftsmanContactModal({
           )}
         </div>
 
-        <div className="space-y-1">
-          <span className="text-[9px] uppercase tracking-wider text-gf-wood font-mono block">微信号 WeChat ID</span>
+        <div className="mt-5">
+          <span className="field-label">微信号</span>
           {isAdmin ? (
             <input
               type="text"
@@ -137,17 +157,17 @@ export default function CraftsmanContactModal({
               onChange={(event) => setWechatIdInput(event.target.value)}
               onBlur={() => void saveWechatId()}
               placeholder="请输入成员微信号"
-              className="w-full px-2.5 py-1.5 bg-white border border-gf-tea/30 rounded text-xs text-gf-wood font-mono focus:outline-none focus:ring-1 focus:ring-gf-wood disabled:opacity-60"
+              className="field-input font-mono"
             />
           ) : (
-            <button type="button" onClick={() => void copyWechatId()} className="w-full p-2 border border-gf-tea/15 bg-white rounded flex items-center justify-between hover:bg-gf-wood/5 transition-colors group">
-              <span className="text-sm font-bold font-mono text-gf-wood truncate">{wechatId || '暂无微信号信息'}</span>
-              {wechatId && <span className="text-[10px] text-gf-tea group-hover:text-gf-wood flex items-center gap-1">{isCopied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}{isCopied ? '已复制' : '复制'}</span>}
+            <button type="button" onClick={() => void copyWechatId()} disabled={!wechatId} className="button-secondary w-full justify-between">
+              <span className="truncate font-mono text-sm">{wechatId || '暂无微信号信息'}</span>
+              {wechatId && <span className="flex items-center gap-1 text-[10px] text-studio-muted">{isCopied ? <Check className="h-3.5 w-3.5 text-studio-success" /> : <Copy className="h-3.5 w-3.5" />}{isCopied ? '已复制' : '复制'}</span>}
             </button>
           )}
         </div>
 
-        <p className="pt-2 text-center text-[10px] text-gf-tea/60 leading-relaxed">{isAdmin ? '微信号在输入框失去焦点后保存；图片写入 Storage 和 Firestore 后才会生效。' : '联络信息由工作室后台维护。'}</p>
+        <p className="mt-5 border-t border-studio-line pt-4 text-center text-[10px] leading-5 text-studio-faint">{isAdmin ? '微信号在输入框失去焦点后保存；图片写入 Storage 和 Firestore 后才会生效。' : '联络信息由工作室后台维护。'}</p>
       </div>
     </div>
   );

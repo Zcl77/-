@@ -1,117 +1,93 @@
-import { Wrench, Layers, Star, HardHat } from 'lucide-react';
-import { motion } from 'motion/react';
+import { Images, MessageSquareText, Settings2, Waypoints } from 'lucide-react';
+
+type AppTab = 'gallery' | 'wip' | 'commission' | 'admin';
 
 interface SidebarProps {
-  activeTab: 'gallery' | 'wip' | 'commission' | 'admin';
-  setActiveTab: (tab: 'gallery' | 'wip' | 'commission' | 'admin') => void;
+  activeTab: AppTab;
+  setActiveTab: (tab: AppTab) => void;
   pendingCommissionsCount: number;
 }
 
-export default function Sidebar({
-  activeTab,
-  setActiveTab,
-  pendingCommissionsCount
-}: SidebarProps) {
+const ITEMS: Array<{ id: AppTab; label: string; title: string; icon: typeof Images }> = [
+  { id: 'gallery', label: '作品', title: '作品展厅', icon: Images },
+  { id: 'wip', label: '进度', title: '制作进度', icon: Waypoints },
+  { id: 'commission', label: '评鉴', title: '评论与联系', icon: MessageSquareText },
+  { id: 'admin', label: '后台', title: '管理后台', icon: Settings2 },
+];
+
+function BrandButton({ onClick, compact = false }: { onClick: () => void; compact?: boolean }) {
   return (
-    <aside className="w-20 md:w-24 h-screen border-r border-gf-tea/20 flex flex-col items-center py-8 justify-between bg-gf-wood select-none shrink-0 z-50">
-      {/* Top Brand Monogram */}
-      <div 
-        onClick={() => setActiveTab('gallery')}
-        className="cursor-pointer group flex flex-col items-center gap-1"
-      >
-        <motion.div 
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className="w-12 h-12 bg-gf-rice flex items-center justify-center transition-colors duration-300 group-hover:bg-gf-sand rounded-sm premium-shadow"
-        >
-          <span className="text-gf-wood font-serif font-black text-2xl">知</span>
-        </motion.div>
-        <span className="text-[9px] uppercase tracking-widest font-mono text-gf-rice/60 mt-1">工作室</span>
-      </div>
+    <button type="button" onClick={onClick} className={`group flex items-center ${compact ? 'gap-2' : 'flex-col gap-3'} text-left`} aria-label="返回知行造境作品展厅">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] border border-studio-brass/60 bg-studio-brass text-lg font-semibold text-studio-canvas transition-colors duration-200 group-hover:bg-[#c3aa76]">知</span>
+      <span className={compact ? 'block' : 'text-center'}>
+        <strong className="block font-serif text-sm font-semibold text-studio-ink">知行造境</strong>
+        <span className="mt-0.5 block text-[9px] font-medium uppercase tracking-[0.12em] text-studio-muted">Zhixing Studio</span>
+      </span>
+    </button>
+  );
+}
 
-      {/* Decorative vertical lettering */}
-      <div className="hidden md:block vertical-text text-[9px] uppercase tracking-[0.45em] font-light text-gf-rice/40 whitespace-nowrap font-serif italic">
-        知行造境 ZHIXING STUDIO
-      </div>
+export default function Sidebar({ activeTab, setActiveTab, pendingCommissionsCount }: SidebarProps) {
+  return (
+    <>
+      <aside className="fixed inset-y-0 left-0 z-50 hidden w-28 flex-col items-center border-r border-studio-line bg-studio-surface px-3 py-6 lg:flex">
+        <BrandButton onClick={() => setActiveTab('gallery')} />
 
-      {/* Primary Vertical Navigation and quick tabs */}
-      <nav className="flex flex-col gap-6 items-center w-full px-2">
-        <motion.button
-          whileHover={{ x: 3 }}
-          whileTap={{ scale: 0.92 }}
-          onClick={() => setActiveTab('gallery')}
-          className={`group flex flex-col items-center justify-center p-2 rounded transition-colors w-full cursor-pointer relative ${
-            activeTab === 'gallery' ? 'text-gf-rice font-medium' : 'text-gf-rice/50 hover:text-gf-rice/90'
-          }`}
-          title="作品展示艺廊"
-        >
-          {activeTab === 'gallery' && (
-             <motion.div layoutId="active-indicator" className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gf-sand rounded-r-sm" transition={{ ease: [0.22, 1, 0.36, 1], duration: 0.4 }} />
-          )}
-          <Layers className={`w-5 h-5 mb-1 transition-transform duration-300 group-hover:scale-110 ${activeTab === 'gallery' ? 'text-gf-sand' : ''}`} />
-          <span className="text-[10px] tracking-wider font-light">作品</span>
-        </motion.button>
+        <nav className="my-auto flex w-full flex-col gap-2" aria-label="主要导航">
+          {ITEMS.map(({ id, label, title, icon: Icon }) => {
+            const active = activeTab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActiveTab(id)}
+                aria-current={active ? 'page' : undefined}
+                className={`relative flex min-h-16 w-full flex-col items-center justify-center gap-1.5 rounded-[4px] border px-2 py-2 text-[11px] transition-colors duration-200 ${active ? 'border-studio-line bg-studio-raised text-studio-ink' : 'border-transparent text-studio-muted hover:bg-studio-raised hover:text-studio-ink'}`}
+                title={title}
+              >
+                <Icon className={`h-4 w-4 ${active ? 'text-studio-brass' : ''}`} aria-hidden="true" />
+                <span>{label}</span>
+                {id === 'admin' && pendingCommissionsCount > 0 && (
+                  <span className="absolute right-2 top-2 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-studio-warning px-1 text-[9px] font-bold text-studio-canvas" aria-label={`${pendingCommissionsCount} 条待审核评论`}>
+                    {pendingCommissionsCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
 
-        <motion.button
-          whileHover={{ x: 3 }}
-          whileTap={{ scale: 0.92 }}
-          onClick={() => setActiveTab('wip')}
-          className={`group flex flex-col items-center justify-center p-2 rounded transition-colors w-full cursor-pointer relative ${
-            activeTab === 'wip' ? 'text-gf-rice font-medium' : 'text-gf-rice/50 hover:text-gf-rice/90'
-          }`}
-          title="进行中的作品及时间线"
-        >
-          {activeTab === 'wip' && (
-             <motion.div layoutId="active-indicator" className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gf-sand rounded-r-sm" transition={{ ease: [0.22, 1, 0.36, 1], duration: 0.4 }} />
-          )}
-          <Wrench className={`w-5 h-5 mb-1 transition-transform duration-300 group-hover:scale-110 ${activeTab === 'wip' ? 'text-gf-sand' : ''}`} />
-          <span className="text-[10px] tracking-wider font-light">进度</span>
-        </motion.button>
+        <p className="text-center text-[9px] leading-4 text-studio-faint">微缩建筑<br />与场景制作</p>
+      </aside>
 
-        <motion.button
-          whileHover={{ x: 3 }}
-          whileTap={{ scale: 0.92 }}
-          onClick={() => setActiveTab('commission')}
-          className={`group flex flex-col items-center justify-center p-2 rounded transition-colors w-full cursor-pointer relative ${
-            activeTab === 'commission' ? 'text-gf-rice font-medium' : 'text-gf-rice/50 hover:text-gf-rice/90'
-          }`}
-          title="访客评论与评分"
-        >
-           {activeTab === 'commission' && (
-             <motion.div layoutId="active-indicator" className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gf-sand rounded-r-sm" transition={{ ease: [0.22, 1, 0.36, 1], duration: 0.4 }} />
-          )}
-          <Star className={`w-5 h-5 mb-1 transition-transform duration-300 group-hover:scale-110 ${activeTab === 'commission' ? 'text-gf-sand' : 'text-gf-sand/60'}`} />
-          <span className="text-[10px] tracking-wider font-light">评鉴</span>
-        </motion.button>
+      <header className="fixed inset-x-0 top-0 z-50 flex h-14 items-center justify-between border-b border-studio-line bg-studio-surface px-4 lg:hidden">
+        <BrandButton compact onClick={() => setActiveTab('gallery')} />
+        <span className="text-[10px] text-studio-faint">{ITEMS.find((item) => item.id === activeTab)?.title}</span>
+      </header>
 
-        <div className="w-8 h-px bg-gf-rice/10 my-1"></div>
-
-        <motion.button
-          whileHover={{ x: 3 }}
-          whileTap={{ scale: 0.92 }}
-          onClick={() => setActiveTab('admin')}
-          className={`group flex flex-col items-center justify-center p-2 rounded transition-colors w-full cursor-pointer relative ${
-            activeTab === 'admin' ? 'text-gf-sand font-semibold bg-gf-rice/5' : 'text-gf-rice/40 hover:text-gf-rice/90'
-          }`}
-          title="工作室后台管理中心"
-        >
-           {activeTab === 'admin' && (
-             <motion.div layoutId="active-indicator" className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gf-sand rounded-r-sm" transition={{ ease: [0.22, 1, 0.36, 1], duration: 0.4 }} />
-          )}
-          <HardHat className="w-5 h-5 mb-1 transition-transform duration-300 group-hover:scale-110" />
-          <span className="text-[10px] tracking-wider font-light text-center">工作台</span>
-          {pendingCommissionsCount > 0 && (
-            <span className="absolute top-1 right-2 bg-gf-sand text-gf-wood text-[9px] font-bold w-4.5 h-4.5 flex items-center justify-center rounded-full border border-gf-wood/30 shadow animate-pulse">
-              {pendingCommissionsCount}
-            </span>
-          )}
-        </motion.button>
+      <nav className="fixed inset-x-0 bottom-0 z-50 grid h-[4.5rem] grid-cols-4 border-t border-studio-line bg-studio-surface px-2 pb-[env(safe-area-inset-bottom)] lg:hidden" aria-label="移动端主要导航">
+        {ITEMS.map(({ id, label, title, icon: Icon }) => {
+          const active = activeTab === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setActiveTab(id)}
+              aria-current={active ? 'page' : undefined}
+              className={`relative flex min-w-0 flex-col items-center justify-center gap-1 text-[10px] transition-colors duration-200 ${active ? 'text-studio-ink' : 'text-studio-muted'}`}
+              title={title}
+            >
+              <Icon className={`h-4 w-4 ${active ? 'text-studio-brass' : ''}`} aria-hidden="true" />
+              <span>{label}</span>
+              {id === 'admin' && pendingCommissionsCount > 0 && (
+                <span className="absolute right-[24%] top-2.5 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-studio-warning px-1 text-[9px] font-bold text-studio-canvas">
+                  {pendingCommissionsCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </nav>
-
-      {/* Bottom vertical tag */}
-      <div className="hidden md:block vertical-text text-[9px] uppercase tracking-[0.45em] font-light text-gf-rice/40 whitespace-nowrap font-serif">
-        微缩建筑与场景制作
-      </div>
-    </aside>
+    </>
   );
 }

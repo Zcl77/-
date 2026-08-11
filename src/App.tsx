@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, MotionConfig, motion } from 'motion/react';
 import AdminDashboard from './components/AdminDashboard';
 import CommissionForm from './components/CommissionForm';
 import GalleryView from './components/GalleryView';
 import Sidebar from './components/Sidebar';
 import WIPTimeline from './components/WIPTimeline';
+import StatusNotice from './components/ui/StatusNotice';
 import { getPublicProjects, retainReferencedAssets } from './domain/visibility';
 import { useAdminAuth } from './hooks/useAdminAuth';
 import { useStudioData } from './hooks/useStudioData';
@@ -43,6 +44,7 @@ export default function App() {
     () => studio.reviews.filter((review) => review.status === 'approved'),
     [studio.reviews],
   );
+  const showInitialLoading = studio.isLoading && studio.projects.length === 0 && studio.reviews.length === 0;
 
   useEffect(() => {
     if (!isAdmin) setActiveEditContext(null);
@@ -217,20 +219,38 @@ export default function App() {
   }, [isAdmin]);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-gf-rice text-gf-wood font-sans selection:bg-gf-wood/20">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} pendingCommissionsCount={isAdmin ? studio.reviews.filter((review) => review.status === 'pending').length : 0} />
-      <div className="flex-1 h-screen relative bg-gf-rice">
-        <AnimatePresence mode="wait">
-          {activeTab === 'gallery' && <motion.div key="gallery" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0"><GalleryView projects={publicProjects} categories={publicCategories} isAdmin={isAdmin} activeEditContext={activeEditContext} setActiveEditContext={setActiveEditContext} craftsmenProfiles={studio.craftsmenProfiles} onUpdateCraftsmenProfiles={saveCraftsmen} onUploadImage={replaceImage} /></motion.div>}
-          {activeTab === 'wip' && <motion.div key="wip" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0"><WIPTimeline projects={publicProjects} /></motion.div>}
-          {activeTab === 'commission' && <motion.div key="commission" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0"><CommissionForm onAddReview={studio.submitReview} projects={publicProjects} reviews={approvedReviews} studioSettings={studio.studioSettings} /></motion.div>}
-          {activeTab === 'admin' && <motion.div key="admin" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0"><AdminDashboard projects={studio.projects} reviews={studio.reviews} categories={studio.categories} hiddenCategories={studio.hiddenCategories} isAdmin={isAdmin} authState={authState} studioSettings={studio.studioSettings} onLogin={login} onLogout={logout} onSaveProject={saveProject} onDeleteProject={deleteProject} onModerateReview={studio.moderateReview} onDeleteReview={studio.removeReview} onAddCategory={studio.addCategory} onRenameCategory={studio.renameCategory} onDeleteCategory={studio.deleteCategory} onCategoryVisibilityChange={studio.updateCategoryVisibility} onSaveSettings={saveSettings} onUploadAsset={uploadPublicImage} /></motion.div>}
-        </AnimatePresence>
-      </div>
+    <MotionConfig reducedMotion="user" transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
+      <div className="min-h-dvh bg-studio-canvas font-sans text-studio-ink">
+        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} pendingCommissionsCount={isAdmin ? studio.reviews.filter((review) => review.status === 'pending').length : 0} />
+        <div className="min-h-dvh pb-[4.5rem] pt-14 lg:pb-0 lg:pl-28 lg:pt-0">
+          <AnimatePresence mode="wait" initial={false}>
+            {showInitialLoading ? (
+              <motion.main key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="page-shell">
+                <div className="page-inner"><StatusNotice tone="loading" title="正在连接作品档案" description="正在读取公开项目与已审核评论。若连接失败，将自动显示可用的本机缓存。" /></div>
+              </motion.main>
+            ) : (
+              <motion.div key={activeTab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}>
+                {activeTab === 'gallery' && <main><GalleryView projects={publicProjects} categories={publicCategories} isAdmin={isAdmin} activeEditContext={activeEditContext} setActiveEditContext={setActiveEditContext} craftsmenProfiles={studio.craftsmenProfiles} onUpdateCraftsmenProfiles={saveCraftsmen} onUploadImage={replaceImage} /></main>}
+                {activeTab === 'wip' && <main><WIPTimeline projects={publicProjects} /></main>}
+                {activeTab === 'commission' && <main><CommissionForm onAddReview={studio.submitReview} projects={publicProjects} reviews={approvedReviews} studioSettings={studio.studioSettings} /></main>}
+                {activeTab === 'admin' && <main><AdminDashboard projects={studio.projects} reviews={studio.reviews} categories={studio.categories} hiddenCategories={studio.hiddenCategories} isAdmin={isAdmin} authState={authState} studioSettings={studio.studioSettings} onLogin={login} onLogout={logout} onSaveProject={saveProject} onDeleteProject={deleteProject} onModerateReview={studio.moderateReview} onDeleteReview={studio.removeReview} onAddCategory={studio.addCategory} onRenameCategory={studio.renameCategory} onDeleteCategory={studio.deleteCategory} onCategoryVisibilityChange={studio.updateCategoryVisibility} onSaveSettings={saveSettings} onUploadAsset={uploadPublicImage} /></main>}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
-      {studio.dataError && <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[220] px-4 py-2 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded shadow-lg">{studio.dataError}</div>}
-      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[220] px-5 py-3 bg-stone-900 border border-gf-sand/40 text-gf-rice text-xs rounded shadow-2xl">{toast}</div>}
-      {isAdmin && activeEditContext && <div className="fixed bottom-6 right-6 z-[180] max-w-sm p-4 bg-gf-wood text-gf-rice border border-gf-sand text-xs rounded shadow-2xl"><div className="flex justify-between gap-4"><strong className="text-gf-sand">图片目标已锁定</strong><button type="button" onClick={() => setActiveEditContext(null)} className="text-gf-sand underline">取消</button></div><p className="mt-2 leading-relaxed">将图片拖入页面，或按 Ctrl+V 粘贴。上传完成并写入 Firestore 后才会显示成功。</p></div>}
-    </div>
+        {studio.dataError && <StatusNotice tone="warning" compact title="实时数据连接异常" description={studio.dataError} className="fixed left-4 right-4 top-16 z-[220] shadow-[var(--shadow-float)] md:left-1/2 md:right-auto md:w-[32rem] md:-translate-x-1/2 lg:top-4" />}
+        {toast && <StatusNotice compact title={toast} className="fixed bottom-20 left-4 right-4 z-[220] shadow-[var(--shadow-float)] md:bottom-6 md:left-1/2 md:right-auto md:w-auto md:max-w-xl md:-translate-x-1/2" />}
+        {isAdmin && activeEditContext && (
+          <div className="fixed bottom-20 right-4 z-[180] max-w-sm rounded-[6px] border border-studio-brass/60 bg-studio-raised p-4 text-xs text-studio-muted shadow-[var(--shadow-float)] md:bottom-6 md:right-6">
+            <div className="flex items-center justify-between gap-4">
+              <strong className="text-studio-ink">图片替换目标已锁定</strong>
+              <button type="button" onClick={() => setActiveEditContext(null)} className="button-quiet min-h-8 px-2">取消</button>
+            </div>
+            <p className="mt-2 leading-6">拖入图片或按 Ctrl+V 粘贴。Storage 上传和 Firestore 保存全部成功后才会确认完成。</p>
+          </div>
+        )}
+      </div>
+    </MotionConfig>
   );
 }

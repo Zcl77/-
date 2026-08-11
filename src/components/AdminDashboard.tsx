@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LogOut } from 'lucide-react';
+import { Contact, FolderKanban, LogOut, MessageSquareText, Tags } from 'lucide-react';
 import { Project, Review, ReviewStatus, StoredImage, StudioSettings } from '../types';
 import { AdminAuthSnapshot } from '../services/firebase/authRepository';
 import { UploadDestination } from '../services/firebase/storageRepository';
@@ -9,6 +9,7 @@ import ProjectEditor, { createProjectDraft } from './admin/ProjectEditor';
 import ProjectList from './admin/ProjectList';
 import ReviewModerationPanel from './admin/ReviewModerationPanel';
 import StudioSettingsPanel from './admin/StudioSettingsPanel';
+import StatusNotice from './ui/StatusNotice';
 
 type AdminTab = 'projects' | 'reviews' | 'categories' | 'settings';
 
@@ -66,30 +67,32 @@ export default function AdminDashboard(props: AdminDashboardProps) {
   };
 
   return (
-    <div className="flex-1 h-screen flex flex-col p-4 md:p-8 lg:p-12 macro-gradient overflow-y-auto">
-      <header className="flex flex-col lg:flex-row justify-between gap-5 border-b border-gf-tea/20 pb-6 mb-8">
+    <div className="page-shell">
+      <div className="page-inner">
+      <header className="mb-8 flex flex-col justify-between gap-5 border-b border-studio-line pb-6 lg:flex-row lg:items-end">
         <div>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl md:text-4xl font-serif font-bold text-gf-wood">知行造境管理后台</h1>
-            <button type="button" disabled={props.authState.status === 'signing-out'} onClick={() => void props.onLogout()} className="px-2.5 py-1 border border-red-200 bg-red-50 text-red-700 text-[10px] rounded flex items-center gap-1 disabled:opacity-50">
-              <LogOut className="w-3.5 h-3.5" /> {props.authState.status === 'signing-out' ? '退出中' : '退出登录'}
-            </button>
-          </div>
-          <p className="text-[10px] uppercase tracking-[0.25em] mt-2 text-gf-tea font-mono">Zhixing Studio Administration</p>
+          <span className="page-kicker">Administration</span>
+          <h1 className="mt-2 font-serif text-2xl font-semibold text-studio-ink md:text-3xl">知行造境管理后台</h1>
+          <p className="mt-2 text-xs text-studio-muted">项目、评论、分类可见性与公开联络信息</p>
         </div>
-        <nav className="flex flex-wrap gap-1 bg-white/50 border border-gf-tea/20 p-1 rounded self-start">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <nav className="flex max-w-full gap-1 overflow-x-auto rounded-[4px] border border-studio-line bg-studio-surface p-1" aria-label="后台模块">
           {([
-            ['projects', `项目 (${props.projects.length})`],
-            ['reviews', `评论 (${props.reviews.filter((review) => review.status === 'pending').length} 待审)`],
-            ['categories', '分类与可见性'],
-            ['settings', '联络设置'],
-          ] as const).map(([value, label]) => (
-            <button key={value} type="button" onClick={() => { setTab(value); setShowEditor(false); }} className={`px-3 py-1.5 text-xs rounded ${tab === value ? 'bg-gf-wood text-gf-rice' : 'text-gf-tea'}`}>{label}</button>
+            ['projects', `项目 ${props.projects.length}`, FolderKanban],
+            ['reviews', `评论 ${props.reviews.filter((review) => review.status === 'pending').length} 待审`, MessageSquareText],
+            ['categories', '分类', Tags],
+            ['settings', '联络', Contact],
+          ] as const).map(([value, label, Icon]) => (
+            <button key={value} type="button" onClick={() => { setTab(value); setShowEditor(false); }} aria-pressed={tab === value} className={`flex min-h-9 shrink-0 items-center gap-1.5 rounded-[3px] px-3 text-xs transition-colors ${tab === value ? 'bg-studio-brass text-studio-canvas' : 'text-studio-muted hover:bg-studio-raised hover:text-studio-ink'}`}><Icon className="h-3.5 w-3.5" />{label}</button>
           ))}
         </nav>
+        <button type="button" disabled={props.authState.status === 'signing-out'} onClick={() => void props.onLogout()} className="button-secondary min-h-10 shrink-0 text-studio-danger">
+          <LogOut className="h-4 w-4" /> {props.authState.status === 'signing-out' ? '正在退出' : '退出'}
+        </button>
+        </div>
       </header>
 
-      {message && <div className="mb-5 p-3 bg-white/75 border border-gf-tea/20 text-xs rounded">{message}</div>}
+      {message && <StatusNotice compact title={message} className="mb-5" />}
 
       {tab === 'projects' && showEditor && editingProject && (
         <div key={editingProject.id}>
@@ -148,6 +151,7 @@ export default function AdminDashboard(props: AdminDashboardProps) {
       {tab === 'settings' && (
         <StudioSettingsPanel settings={props.studioSettings} onSave={props.onSaveSettings} onUploadAsset={props.onUploadAsset} />
       )}
+      </div>
     </div>
   );
 }

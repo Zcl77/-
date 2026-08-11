@@ -1,27 +1,42 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Check, Clock3, Image as ImageIcon, TimerReset } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import { Project } from '../types';
-import { Sparkles, TrendingUp, X } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import MediaLightbox from './ui/MediaLightbox';
+import StatusNotice from './ui/StatusNotice';
+import SmartImage from './ui/SmartImage';
 
 interface WIPTimelineProps {
   projects: Project[];
 }
 
-export default function WIPTimeline({ projects }: WIPTimelineProps) {
-  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+interface LightboxState {
+  images: string[];
+  activeIndex: number;
+  alt: string;
+}
 
-  // Prefer WIP projects first, then completed ones
+const STATUS_LABELS: Record<Project['status'], string> = {
+  WIP: '制作中',
+  Completed: '已完成',
+  Sold: '已售出',
+};
+
+const STEP_LABELS: Record<Project['worksteps'][number]['status'], string> = {
+  DONE: '已完成',
+  ACTIVE: '进行中',
+  NEXT: '待开始',
+};
+
+export default function WIPTimeline({ projects }: WIPTimelineProps) {
   const sortedProjects = useMemo(() => [...projects].sort((a, b) => {
     if (a.status === 'WIP' && b.status !== 'WIP') return -1;
     if (a.status !== 'WIP' && b.status === 'WIP') return 1;
     return b.timeSpent - a.timeSpent;
   }), [projects]);
-
-  const [selectedProjectId, setSelectedProjectId] = useState<string>(
-    sortedProjects.length > 0 ? sortedProjects[0].id : ''
-  );
-
-  const selectedProject = sortedProjects.find(p => p.id === selectedProjectId);
+  const [selectedProjectId, setSelectedProjectId] = useState(sortedProjects[0]?.id ?? '');
+  const [lightbox, setLightbox] = useState<LightboxState | null>(null);
+  const selectedProject = sortedProjects.find((project) => project.id === selectedProjectId);
 
   useEffect(() => {
     if (!sortedProjects.some((project) => project.id === selectedProjectId)) {
@@ -29,309 +44,175 @@ export default function WIPTimeline({ projects }: WIPTimelineProps) {
     }
   }, [selectedProjectId, sortedProjects]);
 
-  const statusTranslations: Record<string, string> = {
-    'WIP': '精研推进中 (WIP)',
-    'Completed': '大功告成',
-    'Sold': '已售出'
-  };
-
   return (
-    <div className="flex-1 h-screen flex flex-col p-4 md:p-8 lg:p-12 macro-gradient overflow-y-auto">
-      {/* Header */}
-      <header className="flex justify-between items-baseline mb-12 border-b border-gf-wood/20 pb-6 text-left">
-        <div className="flex flex-col text-left">
-          <h1 className="text-3xl md:text-5xl font-serif text-gf-wood tracking-tight leading-none font-bold text-left drop-shadow-sm">
-            制作进度 <span className="text-gf-tea/60 font-serif italic text-2xl font-normal block md:inline md:ml-2">Project Progress</span>
-          </h1>
-          <p className="text-[10px] md:text-xs uppercase tracking-[0.3em] mt-3 font-semibold text-gf-tea text-left block opacity-80">
-            知行造境 / Zhixing Studio / 项目制作阶段记录
-          </p>
-        </div>
-      </header>
+    <div className="page-shell">
+      <div className="page-inner">
+        <header className="border-b border-studio-line pb-6 md:pb-8">
+          <span className="page-kicker">Project progress</span>
+          <h1 className="page-title mt-2">制作进度</h1>
+          <p className="page-description mt-3">记录模型从结构、装配到表面处理的阶段状态与过程图片。实际工艺和交付节点以项目记录为准。</p>
+        </header>
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Side: Selectable WIP Projects (3 in 12) */}
-        <div className="lg:col-span-4 flex flex-col gap-4">
-          <h3 className="text-[10px] uppercase tracking-[0.2em] text-gf-tea font-mono font-bold mb-1 text-left">
-            在研匠心项目库 PROJECT ENGINE CORES
-          </h3>
-          
-          <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gf-tea/30 scrollbar-track-transparent">
-            {sortedProjects.map((proj, idx) => (
-              <motion.div
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: idx * 0.1, ease: "easeOut" }}
-                key={proj.id}
-                onClick={() => setSelectedProjectId(proj.id)}
-                className={`p-4 soft-glass transition-all duration-300 ease-out cursor-pointer rounded text-left relative overflow-hidden group ${
-                  selectedProjectId === proj.id
-                    ? 'premium-shadow border-gf-wood/50 bg-white/60'
-                    : 'border-gf-tea/10 hover:premium-shadow hover:border-gf-tea/30 hover:bg-white/50'
-                }`}
-              >
-                {selectedProjectId === proj.id && (
-                  <motion.div layoutId="wipIndicator" className="absolute left-0 top-0 bottom-0 w-1 bg-gf-wood mix-blend-multiply" />
-                )}
-                
-                <div className="flex justify-between items-start mb-2 relative z-10 pl-2">
-                  <h4 className="text-[15px] font-serif text-gf-wood font-extrabold text-left leading-relaxed">{proj.title}</h4>
-                  <span className={`text-[8px] font-mono font-bold tracking-wider px-2 py-0.5 rounded shadow-sm ${
-                    proj.status === 'WIP' ? 'bg-gf-wood text-gf-sand' : 'bg-emerald-100 text-emerald-800'
-                  }`}>
-                    {statusTranslations[proj.status] || proj.status}
-                  </span>
+        {selectedProject ? (
+          <div className="mt-6 grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-8 xl:gap-12">
+            <aside className="order-2 lg:order-1 lg:col-span-4" aria-labelledby="progress-project-index">
+              <div className="lg:sticky lg:top-8">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 id="progress-project-index" className="section-title">项目索引</h2>
+                  <span className="text-[10px] text-studio-faint">{sortedProjects.length} 件</span>
                 </div>
-                
-                {/* Micro progress line */}
-                <div className="mt-4 pt-3 border-t border-gf-tea/15 flex justify-between items-center text-[10px] text-gf-tea relative z-10 pl-2">
-                  <span className="font-serif text-left font-semibold">{proj.scale} • {proj.category}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-gf-wood font-medium">{proj.completionPercent}%</span>
-                    <div className="w-16 h-[3px] bg-gf-wood/15 rounded-full overflow-hidden shadow-inner">
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${proj.completionPercent}%` }}
-                        transition={{ duration: 1.2, ease: "easeOut" }}
-                        className="h-full bg-gf-wood rounded-full" 
-                      />
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-
-          {/* Theoretical notes */}
-          <div className="p-5 mt-2 bg-gradient-to-br from-gf-wood/5 to-gf-rice/30 border border-gf-tea/20 rounded shadow-inner text-xs leading-relaxed text-gf-wood text-left font-serif">
-            <h4 className="font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5 opacity-90">
-              <Sparkles className="w-4 h-4 text-gf-wood" /> 模型制作工艺要解 Technique Note
-            </h4>
-            <p className="font-light opacity-80 leading-loose">
-              本页用于展示项目的阶段、完成比例和过程图片。实际工艺、材料与交付节点以对应项目记录为准。
-            </p>
-          </div>
-        </div>
-
-        {/* Right Side: Render Visual Timeline (8 in 12) */}
-        <div className="lg:col-span-8 relative h-[calc(100vh-180px)] overflow-hidden">
-          <AnimatePresence mode="wait">
-            {selectedProject ? (
-              <motion.div
-                key={selectedProject.id}
-                initial={{ opacity: 0, x: 20, filter: 'blur(4px)' }}
-                animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
-                exit={{ opacity: 0, x: -20, filter: 'blur(4px)' }}
-                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                className="bg-white/50 soft-glass premium-shadow border border-gf-tea/15 p-6 md:p-8 rounded space-y-8 text-left h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gf-tea/30 scrollbar-track-transparent"
-              >
-                {/* Active Selection Details */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gf-tea/15 pb-6">
-                  <div className="text-left">
-                    <span className="text-[10px] uppercase tracking-widest font-mono text-gf-tea block mb-1 font-bold">
-                      当前查看研制历程 CORE TIMELINE
-                    </span>
-                    <h2 className="text-2xl md:text-3xl font-serif font-bold text-gf-wood drop-shadow-sm">{selectedProject.title}</h2>
-                    {selectedProject.isDemo && <span className="inline-block mt-1 text-[9px] text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">演示内容，非客户项目</span>}
-                    <p className="text-xs text-gf-tea/90 mt-1 max-w-xl leading-relaxed text-left">{selectedProject.description}</p>
-                  </div>
-                  
-                  <motion.div 
-                    whileHover={{ scale: 1.05 }}
-                    className="bg-white/70 p-4 rounded border border-gf-tea/20 text-center shrink-0 min-w-[120px] shadow-sm premium-shadow cursor-default"
-                  >
-                    <span className="text-[9px] uppercase tracking-widest text-gf-tea block mb-1 font-semibold">督造累计工时</span>
-                    <div className="flex items-center justify-center gap-1 mt-0.5 text-gf-wood">
-                      <TrendingUp className="w-4 h-4 text-gf-wood" />
-                      <span className="text-xl font-bold font-mono">{selectedProject.timeSpent} 小时</span>
-                    </div>
-                    <span className="text-[8px] font-mono text-gf-tea/65 uppercase tracking-tighter block mt-0.5">ESTIMATED TIMER</span>
-                  </motion.div>
-                </div>
-
-                {/* Progress Bar Display */}
-                <div className="text-left">
-                  <div className="flex justify-between items-baseline mb-2 text-left">
-                    <span className="text-[10px] uppercase tracking-widest font-mono text-gf-tea font-bold">整机零部件装配与着色漆面进度</span>
-                    <span className="text-xs font-mono font-bold text-gf-wood">已完成 {selectedProject.completionPercent}%</span>
-                  </div>
-                  <div className="w-full h-2.5 bg-gf-wood/10 rounded-full overflow-hidden shadow-inner">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${selectedProject.completionPercent}%` }}
-                      transition={{ duration: 1.2, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                      className="h-full bg-gf-wood relative"
-                    >
-                      <div className="absolute right-0 top-0 bottom-0 w-2 bg-gf-sand animate-pulse"></div>
-                    </motion.div>
-                  </div>
-                </div>
-
-                {/* Vertical Chrono-Track */}
-                <div className="relative pl-6 sm:pl-8 border-l border-gf-tea/25 py-2 space-y-8 text-left">
-                  {selectedProject.worksteps && selectedProject.worksteps.length > 0 ? (
-                    selectedProject.worksteps.map((step, idx) => {
-                      const isDone = step.status === 'DONE';
-                      const isActive = step.status === 'ACTIVE';
-
-                      return (
-                        <motion.div 
-                          key={step.id} 
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.5, delay: 0.2 + idx * 0.1, ease: "easeOut" }}
-                          className="relative group text-left"
-                        >
-                          {/* Circle Bullet Badge centered on border */}
-                          <div className={`absolute -left-[31px] sm:-left-[39px] top-1.5 w-4 h-4 rounded-full border-2 transition-all duration-300 flex items-center justify-center ${
-                            isDone 
-                              ? 'bg-emerald-600 border-emerald-600 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
-                              : isActive
-                              ? 'bg-gf-wood border-gf-wood animate-pulse shadow-[0_0_12px_rgba(102,50,28,0.4)]'
-                              : 'bg-gf-rice border-gf-tea/35'
-                          }`}>
-                            {isDone ? (
-                              <span className="text-[8px] text-gf-rice font-bold font-mono">✓</span>
-                            ) : isActive ? (
-                              <span className="w-1.5 h-1.5 bg-gf-sand rounded-full"></span>
-                            ) : (
-                              <span className="text-[8px] text-gf-tea/60 font-bold font-mono">{idx + 1}</span>
-                            )}
-                          </div>
-
-                          {/* Card Container */}
-                          <motion.div 
-                            whileHover={{ y: -2 }}
-                            className={`p-5 border transition-all duration-300 rounded text-left ${
-                              isActive 
-                                ? 'bg-gf-sand/10 border-gf-wood/50 premium-shadow'
-                                : 'bg-white/50 soft-glass border-gf-tea/10 hover:border-gf-tea/20 hover:premium-shadow hover:bg-white/80'
-                            }`}
-                          >
-                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2 text-left">
-                            <h3 className={`text-sm tracking-wide font-serif font-bold ${isActive ? 'text-gf-wood' : 'text-gf-wood/90'}`}>
-                              {step.name}
-                            </h3>
-                            
-                            <span className={`text-[8px] font-mono font-bold tracking-widest px-2 py-0.5 rounded uppercase ${
-                              isDone
-                                ? 'bg-emerald-50 text-emerald-800 border border-emerald-250'
-                                : isActive
-                                ? 'bg-gf-wood text-gf-sand font-semibold'
-                                : 'text-gf-tea border border-gf-tea/20 bg-white/20'
-                            }`}>
-                              {step.status === 'DONE' ? '已镌定' : step.status === 'ACTIVE' ? '精工进行' : '待刻期'}
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                  {sortedProjects.map((project) => {
+                    const active = project.id === selectedProjectId;
+                    return (
+                      <button
+                        key={project.id}
+                        type="button"
+                        onClick={() => setSelectedProjectId(project.id)}
+                        aria-pressed={active}
+                        className={`group rounded-[6px] border p-3 text-left transition-colors duration-200 ${active ? 'border-studio-brass bg-studio-raised' : 'border-studio-line bg-studio-surface hover:border-studio-faint'}`}
+                      >
+                        <span className="flex items-start gap-3">
+                          <span className="aspect-[4/3] w-20 shrink-0 overflow-hidden rounded-[2px] bg-black">
+                            <SmartImage src={project.coverUrl} alt={`${project.title} 封面缩略图`} className="media-hover h-full w-full object-cover" referrerPolicy="no-referrer" loading="lazy" decoding="async" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-start justify-between gap-2">
+                              <strong className="min-w-0 font-serif text-sm font-semibold leading-5 text-studio-ink">{project.title}</strong>
+                              <span className={`shrink-0 text-[9px] ${project.status === 'WIP' ? 'text-studio-warning' : 'text-studio-success'}`}>{STATUS_LABELS[project.status]}</span>
                             </span>
-                          </div>
+                            <span className="mt-1 block text-[10px] text-studio-muted">{project.scale} · {project.category}</span>
+                          </span>
+                        </span>
+                        <span className="mt-3 flex items-center gap-3">
+                          <span className="h-1 flex-1 overflow-hidden rounded-full bg-studio-line">
+                            <span className="block h-full bg-studio-oxide" style={{ width: `${Math.min(100, Math.max(0, project.completionPercent))}%` }} />
+                          </span>
+                          <span className="text-[10px] text-studio-muted">{project.completionPercent}%</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
 
-                          {step.detail && (
-                            <p className="text-xs text-gf-wood/80 leading-relaxed max-w-2xl font-light text-left">
-                              {step.detail}
-                            </p>
-                          )}
+                <div className="mt-6 border-t border-studio-line pt-5 text-xs leading-6 text-studio-muted">
+                  <p className="flex items-center gap-2 font-semibold text-studio-ink"><TimerReset className="h-4 w-4 text-studio-oxide" />记录说明</p>
+                  <p className="mt-2">本页展示完成比例、制作节点和过程图片；没有记录的项目不会被包装成虚构进度。</p>
+                </div>
+              </div>
+            </aside>
 
-                          {/* Process images gallery/grid */}
-                          {(() => {
-                            const allStepImages = [
-                              ...(step.image ? [step.image] : []),
-                              ...(step.images ? step.images : [])
-                            ].filter((url, idx, self) => url && self.indexOf(url) === idx);
+            <div className="order-1 min-w-0 lg:order-2 lg:col-span-8">
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.section
+                  key={selectedProject.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  aria-labelledby="progress-project-title"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setLightbox({ images: [selectedProject.coverUrl], activeIndex: 0, alt: selectedProject.title })}
+                    className="group flex aspect-[16/9] w-full items-center justify-center overflow-hidden rounded-[6px] border border-studio-line bg-black"
+                    aria-label={`放大查看 ${selectedProject.title} 封面`}
+                  >
+                    <SmartImage src={selectedProject.coverUrl} alt={`${selectedProject.title} 封面`} showFallbackText className="media-hover h-full w-full object-contain" referrerPolicy="no-referrer" decoding="async" fetchPriority="high" />
+                  </button>
 
-                            if (allStepImages.length === 0) return null;
+                  <div className="mt-6 flex flex-col justify-between gap-5 border-b border-studio-line pb-6 sm:flex-row sm:items-start">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`tag ${selectedProject.status === 'WIP' ? 'border-studio-warning/50 text-studio-warning' : 'border-studio-success/50 text-studio-success'}`}>{STATUS_LABELS[selectedProject.status]}</span>
+                        {selectedProject.isDemo && <span className="tag border-studio-warning/40 text-studio-warning">演示内容</span>}
+                      </div>
+                      <h2 id="progress-project-title" className="mt-3 font-serif text-2xl font-semibold leading-snug text-studio-ink md:text-3xl">{selectedProject.title}</h2>
+                      <p className="mt-3 max-w-[44rem] text-sm leading-7 text-studio-muted">{selectedProject.description}</p>
+                    </div>
+                    <div className="shrink-0 border-l border-studio-line pl-4">
+                      <span className="flex items-center gap-2 text-[10px] uppercase text-studio-faint"><Clock3 className="h-3.5 w-3.5" />累计工时</span>
+                      <strong className="mt-2 block font-serif text-2xl font-semibold text-studio-ink">{selectedProject.timeSpent}<span className="ml-1 text-xs font-normal text-studio-muted">小时</span></strong>
+                    </div>
+                  </div>
 
-                            return (
-                              <div className="mt-4">
-                                <span className="text-[9px] uppercase tracking-wider text-gf-tea/80 font-mono block mb-1.5 font-bold">
-                                  📸 制作过程图 (Process Snaps - 点击放大预览):
+                  <div className="mt-6" aria-label={`项目已完成 ${selectedProject.completionPercent}%`}>
+                    <div className="flex items-center justify-between gap-3 text-xs">
+                      <span className="text-studio-muted">项目总进度</span>
+                      <strong className="text-studio-ink">{selectedProject.completionPercent}%</strong>
+                    </div>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-studio-line">
+                      <div className="h-full bg-studio-brass" style={{ width: `${Math.min(100, Math.max(0, selectedProject.completionPercent))}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="mt-10" aria-label="制作时间线">
+                    <div className="flex items-center justify-between gap-3 border-b border-studio-line pb-3">
+                      <h3 className="section-heading">制作节点</h3>
+                      <span className="text-[10px] text-studio-faint">{selectedProject.worksteps.length} 个记录</span>
+                    </div>
+
+                    {selectedProject.worksteps.length > 0 ? (
+                      <ol>
+                        {selectedProject.worksteps.map((step, stepIndex) => {
+                          const images = [step.image, ...(step.images ?? [])].filter((url, index, values): url is string => Boolean(url) && values.indexOf(url) === index);
+                          return (
+                            <li key={step.id} className="grid grid-cols-[2.5rem_1fr] border-b border-studio-line py-7 sm:grid-cols-[3.5rem_1fr]">
+                              <div className="relative pt-0.5">
+                                <span className={`flex h-7 w-7 items-center justify-center rounded-full border text-[10px] ${step.status === 'DONE' ? 'border-studio-oxide bg-studio-oxide text-studio-canvas' : step.status === 'ACTIVE' ? 'border-studio-warning text-studio-warning' : 'border-studio-line text-studio-faint'}`}>
+                                  {step.status === 'DONE' ? <Check className="h-3.5 w-3.5" /> : stepIndex + 1}
                                 </span>
-                                {allStepImages.length === 1 ? (
-                                  <div 
-                                    onClick={() => setLightboxImage(allStepImages[0])}
-                                    className="max-w-md aspect-video border border-gf-tea/25 rounded overflow-hidden shadow-xs bg-black/5 relative group/img cursor-zoom-in"
-                                  >
-                                    <img 
-                                      src={allStepImages[0]} 
-                                      alt={step.name} 
-                                      className="w-full h-full object-cover transition-transform duration-500 group-hover/img:scale-105"
-                                      referrerPolicy="no-referrer"
-                                    />
-                                    <div className="absolute top-2 left-2 bg-gf-wood text-gf-sand text-[8px] tracking-widest font-mono px-2 py-0.5 rounded shadow-sm">
-                                      单图实况 Process Snap
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
+                                  <h4 className="font-serif text-base font-semibold leading-6 text-studio-ink">{step.name}</h4>
+                                  <span className={`tag shrink-0 ${step.status === 'ACTIVE' ? 'border-studio-warning/50 text-studio-warning' : step.status === 'DONE' ? 'border-studio-success/50 text-studio-success' : ''}`}>{STEP_LABELS[step.status]}</span>
+                                </div>
+                                {step.detail && <p className="mt-3 max-w-2xl text-sm leading-7 text-studio-muted">{step.detail}</p>}
+
+                                {images.length > 0 && (
+                                  <div className="mt-5">
+                                    <p className="flex items-center gap-2 text-[10px] font-semibold uppercase text-studio-faint"><ImageIcon className="h-3.5 w-3.5" />制作过程图</p>
+                                    <div className={`mt-3 grid gap-2 ${images.length === 1 ? 'grid-cols-1' : 'grid-cols-2 sm:grid-cols-3'}`}>
+                                      {images.map((image, imageIndex) => (
+                                        <button
+                                          key={image}
+                                          type="button"
+                                          onClick={() => setLightbox({ images, activeIndex: imageIndex, alt: step.name })}
+                                          className={`group overflow-hidden rounded-[4px] border border-studio-line bg-black ${images.length === 1 ? 'aspect-video max-w-xl' : 'aspect-[4/3]'}`}
+                                          aria-label={`放大查看 ${step.name} 过程图 ${imageIndex + 1}`}
+                                        >
+                                          <SmartImage src={image} alt={`${step.name} 过程图 ${imageIndex + 1}`} showFallbackText className="media-hover h-full w-full object-cover" referrerPolicy="no-referrer" loading="lazy" decoding="async" />
+                                        </button>
+                                      ))}
                                     </div>
-                                  </div>
-                                ) : (
-                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-w-2xl">
-                                    {allStepImages.map((imgUrl, imgIdx) => (
-                                      <div
-                                        key={imgIdx}
-                                        onClick={() => setLightboxImage(imgUrl)}
-                                        className="aspect-video border border-gf-tea/20 rounded overflow-hidden shadow-xs bg-black/5 relative group/img cursor-zoom-in hover:border-gf-wood hover:shadow-sm transition-all"
-                                      >
-                                        <img 
-                                          src={imgUrl} 
-                                          alt={`${step.name} - ${imgIdx}`} 
-                                          className="w-full h-full object-cover transition-transform duration-350 group-hover/img:scale-110"
-                                          referrerPolicy="no-referrer"
-                                        />
-                                        <div className="absolute bottom-1 right-1 bg-black/70 text-white text-[7px] font-mono px-1.5 py-0.5 rounded">
-                                          #{imgIdx + 1}
-                                        </div>
-                                      </div>
-                                    ))}
                                   </div>
                                 )}
                               </div>
-                            );
-                          })()}
-                        </motion.div>
-                      </motion.div>
-                    );
-                  })
-                ) : (
-                  <div className="text-xs text-gf-tea font-mono italic text-left">
-                    暂无本微缩模型项目的分项工期纪实。
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    ) : (
+                      <StatusNotice tone="empty" title="暂无制作节点记录" description="项目仍可在作品展厅展示；后台补充阶段记录后，这里会按顺序呈现。" className="mt-5" />
+                    )}
                   </div>
-                )}
-              </div>
-            </motion.div>
-          ) : (
-            <motion.div 
-                key="empty"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="h-48 border border-dashed border-gf-tea/30 bg-white/20 flex items-center justify-center rounded premium-shadow"
-              >
-                <span className="text-sm font-mono text-gf-tea">请选择一个左侧的工艺营造日志以查看详情。</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+                </motion.section>
+              </AnimatePresence>
+            </div>
+          </div>
+        ) : (
+          <StatusNotice tone="empty" title="暂无可公开查看的项目进度" description="隐藏分类及其作品不会出现在访客进度页面。" className="mt-8" />
+        )}
       </div>
 
-      {/* Lightbox full-size image preview */}
-      {lightboxImage && (
-        <div 
-          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xs flex items-center justify-center p-4 cursor-zoom-out"
-          onClick={() => setLightboxImage(null)}
-        >
-          <div className="absolute top-4 right-4 z-10">
-            <button 
-              onClick={() => setLightboxImage(null)}
-              className="p-2.5 bg-zinc-950 hover:bg-zinc-900 text-white rounded-full border border-white/10 transition-colors cursor-pointer"
-            >
-              <X className="w-5 h-5 text-white" />
-            </button>
-          </div>
-          <div className="relative max-w-4xl max-h-[85vh] rounded-md overflow-hidden bg-zinc-950 border border-white/5 shadow-2xl">
-            <img 
-              src={lightboxImage} 
-              alt="Process Zoomed Snap" 
-              className="w-auto max-h-[85vh] object-contain mx-auto"
-              referrerPolicy="no-referrer"
-            />
-          </div>
-        </div>
+      {lightbox && (
+        <MediaLightbox
+          images={lightbox.images}
+          activeIndex={lightbox.activeIndex}
+          alt={lightbox.alt}
+          onIndexChange={(activeIndex) => setLightbox((current) => current ? { ...current, activeIndex } : null)}
+          onClose={() => setLightbox(null)}
+        />
       )}
     </div>
   );

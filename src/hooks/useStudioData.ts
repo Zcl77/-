@@ -60,6 +60,7 @@ export function useStudioData(isAdmin: boolean) {
   const [craftsmenProfiles, setCraftsmenProfiles] = useState<Record<string, CraftsmanProfile>>(() => readCache('ZHIXING_CRAFTSMEN', {}));
   const [studioSettings, setStudioSettings] = useState<StudioSettings>(() => readCache('ZHIXING_SETTINGS', DEFAULT_SETTINGS));
   const [dataError, setDataError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     clearLegacyPrivateCaches();
@@ -70,14 +71,27 @@ export function useStudioData(isAdmin: boolean) {
       setHiddenCategories([]);
     }
     setDataError(null);
-    const onError = (error: Error) => setDataError(getErrorMessage(error, '实时数据连接失败，当前显示本机缓存。'));
+    setIsLoading(true);
+    let projectsResolved = false;
+    let reviewsResolved = false;
+    const resolveInitialLoad = () => {
+      if (projectsResolved && reviewsResolved) setIsLoading(false);
+    };
+    const onError = (error: Error) => {
+      setDataError(getErrorMessage(error, '实时数据连接失败，当前显示本机缓存。'));
+      setIsLoading(false);
+    };
     const unsubscribeProjects = subscribeProjects(isAdmin, (value) => {
       setProjects(value);
       if (!isAdmin) writeCache('ZHIXING_PUBLIC_PROJECTS', value);
+      projectsResolved = true;
+      resolveInitialLoad();
     }, onError);
     const unsubscribeReviews = subscribeReviews(isAdmin, (value) => {
       setReviews(value);
       if (!isAdmin) writeCache('ZHIXING_APPROVED_REVIEWS', value);
+      reviewsResolved = true;
+      resolveInitialLoad();
     }, onError);
     const unsubscribeMetadata = subscribeMetadata(isAdmin, {
       onCategories: setCategories,
@@ -112,6 +126,7 @@ export function useStudioData(isAdmin: boolean) {
     craftsmenProfiles,
     studioSettings,
     dataError,
+    isLoading,
     saveProject,
     removeProject,
     submitReview,

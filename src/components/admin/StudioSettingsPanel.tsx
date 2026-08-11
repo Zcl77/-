@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { QrCode, Save, Upload } from 'lucide-react';
-import { StoredImage, StudioSettings } from '../../types';
 import { UploadDestination } from '../../services/firebase/storageRepository';
+import { StoredImage, StudioSettings } from '../../types';
+import StatusNotice from '../ui/StatusNotice';
 
 interface StudioSettingsPanelProps {
   settings: StudioSettings;
@@ -31,45 +32,60 @@ export default function StudioSettingsPanel({ settings, onSave, onUploadAsset }:
     }
   };
 
+  const save = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await onSave({ ...draft, wechatId: draft.wechatId.trim() });
+      setMessage('设置已保存并由 Firebase 确认。');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '设置保存失败。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className="bg-white/70 border border-gf-tea/20 p-6 rounded space-y-5 max-w-3xl">
-      <h3 className="font-serif text-xl font-bold">主理人联络设置</h3>
-      {message && <div className="p-3 border border-gf-tea/20 bg-gf-rice/60 text-xs rounded">{message}</div>}
-      <label className="block space-y-1.5">
-        <span className="text-[10px] uppercase tracking-widest text-gf-tea font-mono font-bold">微信号</span>
-        <input value={draft.wechatId} onChange={(event) => setDraft({ ...draft, wechatId: event.target.value })} maxLength={100} className="w-full border border-gf-tea/30 p-2 text-sm rounded" />
-      </label>
-      <div className="flex flex-col sm:flex-row gap-5 items-start">
-        <div className="w-44 aspect-square border border-gf-tea/20 bg-white rounded flex items-center justify-center overflow-hidden">
-          {draft.wechatQrUrl ? <img src={draft.wechatQrUrl} alt="主理人微信二维码" className="w-full h-full object-contain" /> : <QrCode className="w-12 h-12 text-gf-tea" />}
+    <section className="max-w-3xl" aria-labelledby="studio-settings-title">
+      <h2 id="studio-settings-title" className="section-heading">工作室联络设置</h2>
+      <p className="mt-1 text-xs leading-6 text-studio-muted">这些信息会显示在访客评论与联系页面。图片上传成功后仍需保存设置。</p>
+
+      {message && <StatusNotice compact title={message} className="mt-5" />}
+
+      <div className="ui-panel mt-6 p-5 md:p-6">
+        <label className="block">
+          <span className="field-label">微信号</span>
+          <input value={draft.wechatId} onChange={(event) => setDraft({ ...draft, wechatId: event.target.value })} maxLength={100} className="field-input" />
+        </label>
+
+        <div className="mt-6 flex flex-col items-start gap-6 border-t border-studio-line pt-6 sm:flex-row">
+          <div className="flex aspect-square w-44 shrink-0 items-center justify-center overflow-hidden rounded-[4px] border border-studio-line bg-studio-paper">
+            {draft.wechatQrUrl ? <img src={draft.wechatQrUrl} alt="工作室微信二维码预览" className="h-full w-full object-contain p-2" referrerPolicy="no-referrer" loading="lazy" decoding="async" /> : <QrCode className="h-12 w-12 text-studio-paper-ink/45" />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <span className="field-label">二维码图片</span>
+            <label className="button-secondary cursor-pointer">
+              <Upload className="h-4 w-4" />选择图片
+              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" disabled={progress !== null} className="hidden" onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void upload(file);
+                event.currentTarget.value = '';
+              }} />
+            </label>
+            {progress !== null && (
+              <div className="mt-4" role="status" aria-live="polite">
+                <div className="flex justify-between text-[10px] text-studio-muted"><span>上传中</span><span>{progress}%</span></div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-studio-line"><div className="h-full bg-studio-brass" style={{ width: `${progress}%` }} /></div>
+              </div>
+            )}
+            <p className="mt-4 max-w-md text-xs leading-6 text-studio-muted">新图片保存到 Firebase Storage；Firestore 仅记录下载 URL、对象路径、类型、大小和上传时间。</p>
+          </div>
         </div>
-        <div className="space-y-3">
-          <label className="inline-flex items-center gap-2 px-4 py-2 bg-gf-wood text-gf-rice rounded text-xs cursor-pointer">
-            <Upload className="w-4 h-4" /> 选择二维码图片
-            <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" className="hidden" onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void upload(file);
-              event.currentTarget.value = '';
-            }} />
-          </label>
-          {progress !== null && <p className="text-xs text-gf-tea">上传中 {progress}%</p>}
-          <p className="text-[11px] text-gf-tea max-w-sm leading-relaxed">新图片保存在 Firebase Storage；Firestore 仅记录下载 URL、对象路径、类型、大小和上传时间。</p>
+
+        <div className="mt-6 flex justify-end border-t border-studio-line pt-5">
+          <button type="button" disabled={busy || progress !== null} onClick={() => void save()} className="button-primary"><Save className="h-4 w-4" />{busy ? '正在保存并等待确认' : '保存设置'}</button>
         </div>
       </div>
-      <button type="button" disabled={busy} onClick={() => void (async () => {
-        setBusy(true);
-        setMessage(null);
-        try {
-          await onSave({ ...draft, wechatId: draft.wechatId.trim() });
-          setMessage('设置已保存并由 Firebase 确认。');
-        } catch (error) {
-          setMessage(error instanceof Error ? error.message : '设置保存失败。');
-        } finally {
-          setBusy(false);
-        }
-      })()} className="px-5 py-2 bg-gf-wood text-gf-rice rounded text-xs font-bold flex items-center gap-2 disabled:opacity-50">
-        <Save className="w-4 h-4" /> {busy ? '保存中' : '保存设置'}
-      </button>
-    </div>
+    </section>
   );
 }
