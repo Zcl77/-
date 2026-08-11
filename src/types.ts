@@ -1,5 +1,17 @@
 export type ProjectCategory = string;
 
+export type ProjectVisibility = 'public' | 'hidden';
+export type ReviewStatus = 'pending' | 'approved' | 'rejected';
+
+export interface StoredImage {
+  url: string;
+  path: string;
+  contentType: string;
+  size: number;
+  originalName: string;
+  uploadedAt: string;
+}
+
 export interface WorkStep {
   id: string;
   name: string;
@@ -11,11 +23,11 @@ export interface WorkStep {
 
 export interface RoomDetail {
   id: string;
-  name: string; // Room Name (e.g., "1F工夫茶肆")
-  coverUrl: string; // Room cover image
-  images: string[]; // List of detail shots
-  description: string; // Descriptive text
-  detailsList?: string[]; // Specific miniature techniques/furniture included
+  name: string;
+  coverUrl: string;
+  images: string[];
+  description: string;
+  detailsList?: string[];
 }
 
 export interface Project {
@@ -24,40 +36,63 @@ export interface Project {
   scale: string;
   category: ProjectCategory;
   status: 'WIP' | 'Completed' | 'Sold';
+  visibility: ProjectVisibility;
   description: string;
-  timeSpent: number; // in hours
+  timeSpent: number;
   createdAt: string;
-  completionPercent: number; // 0 to 100
-  coverUrl: string; // cover image path/URL
-  images: string[]; // additional macro shots
+  completionPercent: number;
+  coverUrl: string;
+  images: string[];
   worksteps: WorkStep[];
-  
-  // Custom masterwork fields
-  dimensions?: string; // e.g. "240*60*75 cm"
-  materials?: string; // e.g. "pvc (75%), 苯板 (10%), 复合材料 (15%)"
-  period?: string; // e.g. "2024/09 —— 2025/06"
-  inspiration?: string; // e.g. "揭阳骑楼古城"
-  authors?: string[]; // e.g. ["邓政松", "黄铭涛", ...]
-  rooms?: RoomDetail[]; // Interface slot for clicking a room image to explore details
+  dimensions?: string;
+  materials?: string;
+  period?: string;
+  inspiration?: string;
+  authors?: string[];
+  rooms?: RoomDetail[];
+  imageAssets?: StoredImage[];
+  isDemo?: boolean;
 }
 
 export interface Review {
   id: string;
   reviewerName: string;
-  rating: number; // 1 to 5 stars
-  projectName: string; // e.g. "《骑楼·凝固的烟火》" or "工作室总体打分"
+  rating: number;
+  projectName: string;
   comment: string;
   createdAt: string;
+  status: ReviewStatus;
+  moderatedAt?: string;
+  moderatedBy?: string;
+  isDemo?: boolean;
+}
+
+export interface ReviewInput {
+  reviewerName: string;
+  rating: number;
+  projectName: string;
+  comment: string;
 }
 
 export interface CraftsmanProfile {
   name: string;
   wechatId?: string;
-  wechatQr?: string; // base64 payload or URL string
+  wechatQr?: string;
+  wechatQrAsset?: StoredImage;
 }
 
 export interface StudioSettings {
   wechatId: string;
-  wechatQrUrl: string; // base64 payload or URL string
+  wechatQrUrl: string;
+  wechatQrAsset?: StoredImage;
 }
 
+export interface ImageEditContext {
+  type: 'project-cover' | 'project-image' | 'room-cover' | 'room-image' | 'craftsman-qr' | 'master-qr';
+  projectId?: string;
+  imageIndex?: number;
+  roomId?: string;
+  craftsmanName?: string;
+}
+
+export type AsyncState = 'idle' | 'working' | 'success' | 'error';

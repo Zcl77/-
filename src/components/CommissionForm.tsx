@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Project, Review, StudioSettings } from '../types';
-import { Star, MessageSquare, Award, Sparkles, Send, CheckCircle2, QrCode } from 'lucide-react';
+import { Star, MessageSquare, Award, Send, CheckCircle2, QrCode } from 'lucide-react';
+import { REVIEW_LIMITS, validateReviewInput } from '../domain/validation';
 
 interface CommissionFormProps {
-  onAddReview: (review: Omit<Review, 'id' | 'createdAt'>) => void;
+  onAddReview: (review: { reviewerName: string; rating: number; projectName: string; comment: string }) => Promise<string>;
   projects: Project[];
   reviews: Review[];
   studioSettings?: StudioSettings;
@@ -19,56 +20,57 @@ export default function CommissionForm({ onAddReview, projects, reviews, studioS
   const [isSuccess, setIsSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isCopied, setIsCopied] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const wechatId = studioSettings?.wechatId || 'chenluzhao06';
+  const wechatId = studioSettings?.wechatId.trim() ?? '';
   const wechatQrUrl = studioSettings?.wechatQrUrl;
 
-  const handleCopyWeChat = () => {
-    navigator.clipboard.writeText(wechatId).then(() => {
+  const handleCopyWeChat = async () => {
+    if (!wechatId) return;
+    try {
+      await navigator.clipboard.writeText(wechatId);
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
-    });
+    } catch {
+      setErrorMsg('复制失败，请手动选中微信号。');
+    }
   };
 
 
   // Calculate rating stats
-  const averageRating = reviews.length > 0 
+  const averageRating = reviews.length > 0
     ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(2)
-    : '5.0';
+    : '—';
 
-  const fiveStarCount = reviews.filter(r => r.rating === 5).length;
-  const fiveStarPercent = reviews.length > 0 ? (fiveStarCount / reviews.length) * 100 : 100;
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
-    if (!reviewerName.trim()) {
-      setErrorMsg('请填写您的评鉴大名或昵称。');
-      return;
-    }
-    if (!comment.trim()) {
-      setErrorMsg('请撰写您的评鉴观感或弹幕寄语。');
-      return;
-    }
-
-    onAddReview({
+    const input = {
       reviewerName: reviewerName.trim(),
       rating,
       projectName: projectName.trim(),
-      comment: comment.trim()
-    });
-
-    setIsSuccess(true);
-    setReviewerName('');
-    setComment('');
-    setRating(5);
-    setProjectName('工作室总体打分');
-
-    // Reset success message after 4 seconds
-    setTimeout(() => {
-      setIsSuccess(false);
-    }, 4000);
+      comment: comment.trim(),
+    };
+    const errors = validateReviewInput(input);
+    if (errors.length > 0) {
+      setErrorMsg(errors[0]);
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await onAddReview(input);
+      setIsSuccess(true);
+      setReviewerName('');
+      setComment('');
+      setRating(5);
+      setProjectName('工作室总体打分');
+      setTimeout(() => setIsSuccess(false), 4000);
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : '提交失败，请稍后重试。');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const getRatingSubtitle = (val: number) => {
@@ -88,10 +90,10 @@ export default function CommissionForm({ onAddReview, projects, reviews, studioS
       <header className="flex flex-col md:flex-row md:items-baseline justify-between mb-10 border-b border-gf-wood/20 pb-6 gap-4">
         <div className="flex flex-col text-left">
           <h1 id="rating-system-header" className="text-3xl md:text-5xl font-serif text-gf-wood tracking-tight leading-none font-bold">
-            实时在线评鉴 <span className="text-gf-tea/60 font-serif italic text-2xl font-normal block md:inline md:ml-2">Live Scoring</span>
+            访客评鉴 <span className="text-gf-tea/60 font-serif italic text-2xl font-normal block md:inline md:ml-2">Visitor Reviews</span>
           </h1>
           <p className="text-[10px] md:text-xs uppercase tracking-[0.3em] mt-3 font-semibold text-gf-tea">
-            观众交互打分系统 • 模型肌理考究 • 实时弹幕评论
+            公开评论均经工作室审核后展示
           </p>
         </div>
         
@@ -122,18 +124,19 @@ export default function CommissionForm({ onAddReview, projects, reviews, studioS
               <Award className="w-6 h-6 text-gf-wood shrink-0 mt-0.5" />
               <div>
                 <h3 className="text-sm font-semibold text-gf-wood font-serif mb-1 font-bold">
-                  非卖品尊奉与微信合作通道
+                  项目咨询与合作联络
                 </h3>
                 <p className="text-xs text-gf-wood/80 leading-relaxed text-left">
-                  本工坊陈列的所有殿堂级模型作品均为<strong>非卖品</strong>。
-                  如果您有合作办展、定制租赁、考察微刻技术，或有深入探讨的意向，欢迎直接通过微信（WeChat）联系主理人进行一对一沟通：
+                  如需咨询建筑微缩、场景制作或项目合作，可通过下方工作室微信联系主理人。
                 </p>
                 
                 {/* WeChat QR Card */}
-                <div 
-                  onClick={handleCopyWeChat}
-                  title="点击复制微信号"
-                  className="mt-4 bg-white p-3 border border-gf-tea/15 rounded flex items-center gap-4 cursor-pointer hover:border-gf-wood/50 transition-all shadow-xs"
+                <button
+                  type="button"
+                  disabled={!wechatId}
+                  onClick={() => void handleCopyWeChat()}
+                  title={wechatId ? '点击复制微信号' : '尚未配置微信号'}
+                  className="mt-4 w-full bg-white p-3 border border-gf-tea/15 rounded flex items-center gap-4 text-left enabled:cursor-pointer enabled:hover:border-gf-wood/50 disabled:opacity-70 transition-all shadow-xs"
                 >
                   <div className="w-12 h-12 bg-gf-wood/5 border border-gf-tea/20 flex items-center justify-center rounded overflow-hidden select-none">
                     {wechatQrUrl ? (
@@ -150,13 +153,13 @@ export default function CommissionForm({ onAddReview, projects, reviews, studioS
                   <div className="text-left font-mono flex-1 min-w-0">
                     <span className="text-[9px] uppercase tracking-wider text-gf-tea block font-bold">主理人微信 Contact</span>
                     <span className="text-sm font-bold text-gf-wood block select-all truncate">
-                      {wechatId}
+                      {wechatId || '暂未配置'}
                     </span>
                     <span className="text-[8px] text-gf-tea block mt-0.5 font-light">
-                      {isCopied ? '✨ 复制成功 Copied!' : '📋 点击此处即可一键复制'}
+                      {!wechatId ? '请在后台联络设置中填写' : isCopied ? '复制成功' : '点击复制'}
                     </span>
                   </div>
-                </div>
+                </button>
               </div>
             </div>
           </div>
@@ -176,7 +179,7 @@ export default function CommissionForm({ onAddReview, projects, reviews, studioS
             {isSuccess && (
               <div className="bg-emerald-50 border border-emerald-200 p-3 text-xs font-mono text-emerald-800 rounded mb-4 flex items-center gap-2 text-left">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 animate-bounce" />
-                <span>[投递成功 RESOLVED]: 评分与简评已实时同步至评鉴墙！</span>
+                <span>提交成功。评论已进入待审核状态，批准后才会公开显示。</span>
               </div>
             )}
 
@@ -218,7 +221,7 @@ export default function CommissionForm({ onAddReview, projects, reviews, studioS
                 <label className="text-[10px] uppercase tracking-widest text-gf-tea font-mono block font-bold">
                   评鉴打分对象 Target Object
                 </label>
-                <select
+                  <select
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
                   className="w-full bg-white text-stone-950 border border-gf-tea/35 p-2 text-sm rounded focus:ring-1 focus:ring-gf-wood focus:outline-none cursor-pointer font-sans hover:bg-amber-50 hover:border-gf-wood hover:text-stone-950 transition-all duration-200"
@@ -235,9 +238,10 @@ export default function CommissionForm({ onAddReview, projects, reviews, studioS
                 <label className="text-[10px] uppercase tracking-widest text-gf-tea font-mono block font-bold">
                   评鉴人大名/昵称 Name *
                 </label>
-                <input
+                  <input
                   type="text"
-                  required
+                    required
+                    maxLength={REVIEW_LIMITS.reviewerName}
                   placeholder="例如: 澄海老藏客 / 观展人小张"
                   value={reviewerName}
                   onChange={(e) => setReviewerName(e.target.value)}
@@ -250,8 +254,9 @@ export default function CommissionForm({ onAddReview, projects, reviews, studioS
                 <label className="text-[10px] uppercase tracking-widest text-gf-tea font-mono block font-bold">
                   评鉴观感与技艺点评 Comment *
                 </label>
-                <textarea
-                  required
+                  <textarea
+                    required
+                    maxLength={REVIEW_LIMITS.comment}
                   rows={4}
                   placeholder="说点什么吧，您觉得模型的墙皮旧化仿真度如何？暖光LED排线是否震撼？"
                   value={comment}
@@ -263,10 +268,11 @@ export default function CommissionForm({ onAddReview, projects, reviews, studioS
               {/* Submit trigger */}
               <button
                 type="submit"
-                className="w-full py-2.5 bg-gf-wood hover:bg-gf-wood/90 text-gf-rice font-serif font-bold uppercase tracking-widest transition-all rounded duration-300 flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                disabled={isSubmitting}
+                className="w-full py-2.5 bg-gf-wood hover:bg-gf-wood/90 text-gf-rice font-serif font-bold uppercase tracking-widest transition-all rounded duration-300 flex items-center justify-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
               >
                 <Send className="w-3.5 h-3.5" />
-                立即投递评鉴 Submit Review
+                {isSubmitting ? '提交并等待确认' : '提交评鉴'}
               </button>
             </form>
           </div>
@@ -277,10 +283,10 @@ export default function CommissionForm({ onAddReview, projects, reviews, studioS
           <div className="flex items-center justify-between border-b border-gf-tea/20 pb-2">
             <h3 className="text-sm font-serif text-gf-wood font-bold flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-gf-wood" />
-              实时评鉴评论墙 Live Reviews ({reviews.length})
+              已审核评论 ({reviews.length})
             </h3>
             <span className="text-[9px] uppercase tracking-widest font-mono text-gf-tea flex items-center gap-1.5 font-bold">
-              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" /> 实时互通中
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> 仅显示 approved
             </span>
           </div>
 
@@ -305,6 +311,7 @@ export default function CommissionForm({ onAddReview, projects, reviews, studioS
                         <span className="text-[9px] px-1.5 py-0.5 bg-gf-sand/15 text-gf-wood border border-gf-tea/10 rounded font-serif font-medium">
                           {rev.projectName}
                         </span>
+                        {rev.isDemo && <span className="text-[9px] px-1.5 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded">演示评论</span>}
                       </div>
 
                       {/* Comment text */}

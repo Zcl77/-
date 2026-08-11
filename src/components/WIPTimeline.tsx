@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Project } from '../types';
-import { Hammer, CircleDollarSign, Compass, Calendar, Sparkles, TrendingUp, X } from 'lucide-react';
+import { Sparkles, TrendingUp, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface WIPTimelineProps {
@@ -11,22 +11,28 @@ export default function WIPTimeline({ projects }: WIPTimelineProps) {
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
   // Prefer WIP projects first, then completed ones
-  const sortedProjects = [...projects].sort((a, b) => {
+  const sortedProjects = useMemo(() => [...projects].sort((a, b) => {
     if (a.status === 'WIP' && b.status !== 'WIP') return -1;
     if (a.status !== 'WIP' && b.status === 'WIP') return 1;
     return b.timeSpent - a.timeSpent;
-  });
+  }), [projects]);
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>(
     sortedProjects.length > 0 ? sortedProjects[0].id : ''
   );
 
-  const selectedProject = projects.find(p => p.id === selectedProjectId);
+  const selectedProject = sortedProjects.find(p => p.id === selectedProjectId);
+
+  useEffect(() => {
+    if (!sortedProjects.some((project) => project.id === selectedProjectId)) {
+      setSelectedProjectId(sortedProjects[0]?.id ?? '');
+    }
+  }, [selectedProjectId, sortedProjects]);
 
   const statusTranslations: Record<string, string> = {
     'WIP': '精研推进中 (WIP)',
     'Completed': '大功告成',
-    'Sold': '已被藏家高远奉收'
+    'Sold': '已售出'
   };
 
   return (
@@ -35,10 +41,10 @@ export default function WIPTimeline({ projects }: WIPTimelineProps) {
       <header className="flex justify-between items-baseline mb-12 border-b border-gf-wood/20 pb-6 text-left">
         <div className="flex flex-col text-left">
           <h1 className="text-3xl md:text-5xl font-serif text-gf-wood tracking-tight leading-none font-bold text-left drop-shadow-sm">
-            造物考工记 <span className="text-gf-tea/60 font-serif italic text-2xl font-normal block md:inline md:ml-2">Evolution Log</span>
+            制作进度 <span className="text-gf-tea/60 font-serif italic text-2xl font-normal block md:inline md:ml-2">Project Progress</span>
           </h1>
           <p className="text-[10px] md:text-xs uppercase tracking-[0.3em] mt-3 font-semibold text-gf-tea text-left block opacity-80">
-            进行中模型研制进度时间线 / 素造 • 精雕 • 漆画 • 旧化考工
+            知行造境 / Zhixing Studio / 项目制作阶段记录
           </p>
         </div>
       </header>
@@ -102,7 +108,7 @@ export default function WIPTimeline({ projects }: WIPTimelineProps) {
               <Sparkles className="w-4 h-4 text-gf-wood" /> 模型制作工艺要解 Technique Note
             </h4>
             <p className="font-light opacity-80 leading-loose">
-              微型景观重工工序均由多层手绘画胶、微缩拼插骨架、定制灰泥纹理、国画漆色擦洗洗渍以及超精细天然色粉尘埃风化等，历经千百工时琢磨而成，非纯机械量产品所能企及。
+              本页用于展示项目的阶段、完成比例和过程图片。实际工艺、材料与交付节点以对应项目记录为准。
             </p>
           </div>
         </div>
@@ -126,6 +132,7 @@ export default function WIPTimeline({ projects }: WIPTimelineProps) {
                       当前查看研制历程 CORE TIMELINE
                     </span>
                     <h2 className="text-2xl md:text-3xl font-serif font-bold text-gf-wood drop-shadow-sm">{selectedProject.title}</h2>
+                    {selectedProject.isDemo && <span className="inline-block mt-1 text-[9px] text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">演示内容，非客户项目</span>}
                     <p className="text-xs text-gf-tea/90 mt-1 max-w-xl leading-relaxed text-left">{selectedProject.description}</p>
                   </div>
                   
