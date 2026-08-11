@@ -2,8 +2,16 @@ import { randomUUID } from 'node:crypto';
 import { applicationDefault, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
+import {
+  buildVisibilityPreflight,
+  createRemoteWriteGuard,
+  decideProjectVisibility,
+  formatVisibilityPreflight,
+  isApplyRequested,
+} from './migration-visibility.mjs';
 
-const apply = process.argv.includes('--apply');
+const apply = isApplyRequested(process.argv.slice(2));
+const writeRemote = createRemoteWriteGuard(apply);
 const projectId = process.env.FIREBASE_PROJECT_ID;
 const databaseId = process.env.FIREBASE_DATABASE_ID;
 const storageBucket = process.env.FIREBASE_STORAGE_BUCKET;
@@ -50,7 +58,7 @@ async function migrateImage(value, ownerType, ownerId, fieldPath) {
 
   const token = randomUUID();
   const objectPath = `public/migrated/${safeSegment(ownerType)}/${safeSegment(ownerId)}/${safeSegment(fieldPath)}.${extensionFor(parsed.contentType)}`;
-  await bucket.file(objectPath).save(parsed.buffer, {
+  await writeRemote(() => bucket.file(objectPath).save(parsed.buffer, {
     resumable: false,
     contentType: parsed.contentType,
     metadata: {
@@ -59,7 +67,7 @@ async function migrateImage(value, ownerType, ownerId, fieldPath) {
         migrationSource: fieldPath,
       },
     },
-  });
+  }));
   const url = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(storageBucket)}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
   return {
     value: url,
@@ -109,14 +117,14 @@ async function migrateProject(documentSnapshot, hiddenCategories) {
     }
   }
 
-  const visibility = hiddenCategories.includes(next.category) || next.visibility === 'hidden' ? 'hidden' : 'public';
+  const visibility = decideProjectVisibility(original, hiddenCategories).targetVisibility;
   if (next.visibility !== visibility) { next.visibility = visibility; changed = true; }
   if (DEMO_PROJECT_IDS.has(documentSnapshot.id) && next.isDemo !== true) { next.isDemo = true; changed = true; }
   if (assets.length > 0) next.imageAssets = Array.from(new Map(assets.map((asset) => [asset.path, asset])).values());
 
   if (changed) {
     stats.projectDocs += 1;
-    if (apply) await documentSnapshot.ref.set(next);
+    if (apply) await writeRemote(() => documentSnapshot.ref.set(next));
   }
 }
 
@@ -131,7 +139,7 @@ async function migrateReview(documentSnapshot) {
   if (isKnownDemo && next.isDemo !== true) { next.isDemo = true; changed = true; }
   if (changed) {
     stats.reviewDocs += 1;
-    if (apply) await documentSnapshot.ref.set(next);
+    if (apply) await writeRemote(() => documentSnapshot.ref.set(next));
   }
 }
 
@@ -144,7 +152,7 @@ async function migrateSettings(documentSnapshot) {
   if (apply && result.asset) {
     next.wechatQrUrl = result.value;
     next.wechatQrAsset = result.asset;
-    await documentSnapshot.ref.set(next);
+    await writeRemote(() => documentSnapshot.ref.set(next));
   }
 }
 
@@ -162,7 +170,7 @@ async function migrateCraftsmen(documentSnapshot) {
   }
   if (changed) {
     stats.metadataDocs += 1;
-    if (apply) await documentSnapshot.ref.set(next);
+    if (apply) await writeRemote(() => documentSnapshot.ref.set(next));
   }
 }
 
@@ -174,6 +182,18 @@ const [projects, reviews, settings, craftsmen] = await Promise.all([
   firestore.doc('metadata/settings').get(),
   firestore.doc('metadata/craftsmen').get(),
 ]);
+
+const visibilityPreflight = buildVisibilityPreflight(
+  projects.docs.map((documentSnapshot) => ({ id: documentSnapshot.id, data: documentSnapshot.data() })),
+  hiddenCategories,
+);
+console.log(apply
+  ? '运行模式：APPLY。检测到明确的 --apply，将在安全预检通过后执行写入。'
+  : '运行模式：DRY-RUN。未提供 --apply，不会写入 Firestore 或 Storage。');
+console.log(formatVisibilityPreflight(visibilityPreflight));
+if (visibilityPreflight.expandsPublicScope.length > 0) {
+  throw new Error('安全预检失败：检测到会扩大公开范围的项目，迁移已中止。');
+}
 
 for (const documentSnapshot of projects.docs) await migrateProject(documentSnapshot, hiddenCategories);
 for (const documentSnapshot of reviews.docs) await migrateReview(documentSnapshot);
