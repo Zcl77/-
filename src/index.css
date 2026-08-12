@@ -1,9 +1,10 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
-  --font-sans: "Inter", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "Noto Serif SC", "Songti SC", "SimSun", Georgia, serif;
-  --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  --font-sans:
+    'Inter', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: 'Noto Serif SC', 'Songti SC', 'SimSun', Georgia, serif;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
 
   --color-studio-canvas: #101311;
   --color-studio-surface: #171b18;
@@ -77,7 +78,9 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 [tabindex]:focus-visible {
-  box-shadow: 0 0 0 2px var(--color-studio-canvas), 0 0 0 4px var(--color-studio-brass);
+  box-shadow:
+    0 0 0 2px var(--color-studio-canvas),
+    0 0 0 4px var(--color-studio-brass);
 }
 
 ::selection {
@@ -166,7 +169,12 @@ textarea:focus-visible,
     font-weight: 600;
     line-height: 1.2;
     letter-spacing: 0;
-    transition: border-color var(--duration-fast) ease, background-color var(--duration-fast) ease, color var(--duration-fast) ease, opacity var(--duration-fast) ease, transform var(--duration-fast) var(--ease-studio);
+    transition:
+      border-color var(--duration-fast) ease,
+      background-color var(--duration-fast) ease,
+      color var(--duration-fast) ease,
+      opacity var(--duration-fast) ease,
+      transform var(--duration-fast) var(--ease-studio);
   }
 
   .button-primary {
@@ -268,7 +276,9 @@ textarea:focus-visible,
     color: var(--color-studio-ink);
     font-size: 0.875rem;
     line-height: 1.5;
-    transition: border-color var(--duration-fast) ease, background-color var(--duration-fast) ease;
+    transition:
+      border-color var(--duration-fast) ease,
+      background-color var(--duration-fast) ease;
   }
 
   .field-input::placeholder {
@@ -308,7 +318,9 @@ textarea:focus-visible,
     padding: 0.5rem 0.75rem;
     color: var(--color-studio-ink);
     font-size: 0.75rem;
-    transition: border-color var(--duration-fast) ease, background-color var(--duration-fast) ease;
+    transition:
+      border-color var(--duration-fast) ease,
+      background-color var(--duration-fast) ease;
   }
 
   .small-action:hover {
@@ -317,7 +329,10 @@ textarea:focus-visible,
   }
 
   .media-hover {
-    transition: transform var(--duration-slow) var(--ease-studio), opacity var(--duration-base) ease, filter var(--duration-base) ease;
+    transition:
+      transform var(--duration-slow) var(--ease-studio),
+      opacity var(--duration-base) ease,
+      filter var(--duration-base) ease;
   }
 
   .group:hover .media-hover,
@@ -326,7 +341,6 @@ textarea:focus-visible,
     transform: scale(1.03);
     filter: brightness(1.04);
   }
-
 }
 
 @media (min-width: 768px) {

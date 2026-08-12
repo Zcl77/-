@@ -3,15 +3,6 @@ export type ProjectCategory = string;
 export type ProjectVisibility = 'public' | 'hidden';
 export type ReviewStatus = 'pending' | 'approved' | 'rejected';
 
-export interface StoredImage {
-  url: string;
-  path: string;
-  contentType: string;
-  size: number;
-  originalName: string;
-  uploadedAt: string;
-}
-
 export interface WorkStep {
   id: string;
   name: string;
@@ -32,13 +23,14 @@ export interface RoomDetail {
 
 export interface Project {
   id: string;
+  slug: string;
   title: string;
   scale: string;
   category: ProjectCategory;
   status: 'WIP' | 'Completed' | 'Sold';
   visibility: ProjectVisibility;
   description: string;
-  timeSpent: number;
+  timeSpent?: number;
   createdAt: string;
   completionPercent: number;
   coverUrl: string;
@@ -50,7 +42,6 @@ export interface Project {
   inspiration?: string;
   authors?: string[];
   rooms?: RoomDetail[];
-  imageAssets?: StoredImage[];
   isDemo?: boolean;
 }
 
@@ -72,27 +63,150 @@ export interface ReviewInput {
   rating: number;
   projectName: string;
   comment: string;
-}
-
-export interface CraftsmanProfile {
-  name: string;
-  wechatId?: string;
-  wechatQr?: string;
-  wechatQrAsset?: StoredImage;
-}
-
-export interface StudioSettings {
-  wechatId: string;
-  wechatQrUrl: string;
-  wechatQrAsset?: StoredImage;
-}
-
-export interface ImageEditContext {
-  type: 'project-cover' | 'project-image' | 'room-cover' | 'room-image' | 'craftsman-qr' | 'master-qr';
-  projectId?: string;
-  imageIndex?: number;
-  roomId?: string;
-  craftsmanName?: string;
+  workSlug?: string;
 }
 
 export type AsyncState = 'idle' | 'working' | 'success' | 'error';
+
+export interface MediaRenditions {
+  id: string;
+  originalUrl: string;
+  displayUrl: string;
+  thumbnailUrl: string;
+  width: number;
+  height: number;
+}
+
+export interface PublicProcessImage {
+  id: string;
+  altText: string;
+  caption: string;
+  sortOrder: number;
+  media: MediaRenditions;
+}
+
+export interface PublicProcessPost {
+  id: string;
+  title: string;
+  slug: string;
+  summary: string;
+  body: string;
+  publishedAt: string | null;
+  work: { title: string; slug: string } | null;
+  images: PublicProcessImage[];
+  isDevData: boolean;
+}
+
+export interface SiteInfo {
+  studioName: string;
+  studioNameEn: string;
+  tagline: string;
+  description: string;
+  contactName: string;
+  phone: string;
+  wechat: string;
+  email: string;
+  privacyNotice: string;
+  isDevData: boolean;
+}
+
+export interface AuthenticatedUser {
+  authenticated: true;
+  id: string;
+  username: string;
+  displayName: string;
+  role: 'staff' | 'customer';
+  isStaff: boolean;
+  mustChangePassword: boolean;
+  isDevData: boolean;
+}
+
+export type CurrentUser = AuthenticatedUser | { authenticated: false };
+
+export interface CustomerOrder {
+  id: string;
+  orderNumber: string;
+  orderType: string;
+  confirmationStatus: 'inquiry' | 'proposed' | 'confirmed' | 'cancelled';
+  agreedAmount: string | null;
+  quotedAt: string | null;
+  quoteDecision: 'none' | 'pending' | 'accepted' | 'rejected';
+  quoteDecisionAt: string | null;
+  depositStatus: 'not_recorded' | 'pending' | 'recorded' | 'waived';
+  finalPaymentStatus: 'not_recorded' | 'pending' | 'recorded' | 'waived';
+  deliveryStatus: 'not_ready' | 'ready' | 'delivered';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProductionStage {
+  id: string;
+  name: string;
+  sortOrder: number;
+  status: 'pending' | 'active' | 'completed' | 'skipped';
+  description: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface CustomerProject {
+  id: string;
+  name: string;
+  description: string;
+  status: 'planning' | 'active' | 'paused' | 'review' | 'completed' | 'cancelled';
+  completionPercent: number;
+  nextPlan: string;
+  expectedNextUpdateAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  currentStage: ProductionStage | null;
+  manager: { id: string; displayName: string } | null;
+  latestUpdate: { id: string; title: string; publishedAt: string | null } | null;
+  unreadUpdateCount: number;
+  order?: CustomerOrder;
+}
+
+export interface ProgressImageItem {
+  id: string;
+  caption: string;
+  altText: string;
+  sortOrder: number;
+  media: MediaRenditions;
+}
+
+export interface ProgressUpdateItem {
+  id: string;
+  title: string;
+  body: string;
+  nextPlan: string;
+  expectedNextUpdateAt: string | null;
+  requiresAcknowledgement: boolean;
+  publishedAt: string | null;
+  stage: ProductionStage | null;
+  author: { id: string; displayName: string };
+  images: ProgressImageItem[];
+  receipt: { viewedAt: string | null; acknowledgedAt: string | null };
+}
+
+export interface ProjectMessageItem {
+  id: string;
+  body: string;
+  parentId: string | null;
+  author: { id: string; displayName: string };
+  isMine: boolean;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface InquiryInput {
+  name: string;
+  contactType: 'phone' | 'wechat';
+  contactValue: string;
+  projectType: string;
+  scale: string;
+  budgetRange: string;
+  expectedDeliveryDate: string;
+  description: string;
+  privacyConsent: boolean;
+  attachments: File[];
+}

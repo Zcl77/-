@@ -43,7 +43,9 @@ describe('gallery selection reconciliation', () => {
     });
 
     expect(resolveGalleryMedia(updated, { type: 'project-cover' })?.url).toBe(updated.coverUrl);
-    expect(resolveGalleryMedia(updated, { type: 'project-image', imageIndex: 0 })?.url).toBe(updated.images[0]);
+    expect(resolveGalleryMedia(updated, { type: 'project-image', imageIndex: 0 })?.url).toBe(
+      updated.images[0],
+    );
   });
 
   it('falls back safely when the selected project is hidden or deleted', () => {
@@ -64,7 +66,9 @@ describe('gallery selection reconciliation', () => {
   it('falls back to current cover media when a selected image is removed', () => {
     const updated = createProject('selected', { images: [] });
 
-    expect(resolveGalleryMedia(updated, { type: 'project-image', imageIndex: 0 })?.url).toBe(updated.coverUrl);
+    expect(resolveGalleryMedia(updated, { type: 'project-image', imageIndex: 0 })?.url).toBe(
+      updated.coverUrl,
+    );
   });
 
   it('does not mutate the project list used by the gallery, details, or admin editor', () => {

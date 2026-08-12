@@ -1,153 +1,174 @@
 # 知行造境 / Zhixing Studio
 
-知行造境官方网站与客户项目管理系统的早期原型。当前仓库保留作品展厅、制作进度、评论与后台管理等既有功能，并完成了第一阶段的权限、数据与工程基础加固。
+“知行造境”的正式业务网站与客户项目中心。公开网站用于展示作品、公开制作日志并接收询价；登录后的客户中心用于查看被明确授权的订单、制作阶段、真实进度、私人图片、确认记录和项目留言。
 
-仓库中的预置作品和评论仅用于演示界面，前台与后台均标记为“演示内容”，不代表真实客户、评价、销售或商业成绩。
+产品原则是以透明进度和持续沟通连接消费者与工作室。公开作品与客户私人项目是两个完全分开的权限域，React 中隐藏按钮不构成安全边界。
 
 ## 技术栈
 
-- React 19、TypeScript、Vite 6、Tailwind CSS 4
-- Firebase Authentication、Cloud Firestore、Cloud Storage
-- Vitest、Firebase Local Emulator Suite
+- React 19、TypeScript、Vite
+- Django 5.2 LTS、Django REST Framework
+- MySQL 8.4、InnoDB、`utf8mb4`、严格模式
+- Docker Compose
+- Docker Volume 持久化 MySQL、媒体和静态文件
+- Django Session、HttpOnly Cookie、CSRF、Argon2 密码哈希
+
+正式运行不依赖 Firebase、Firestore、Firebase Storage、Google 登录或 Custom Claims。相关运行时代码、依赖、规则和迁移脚本已经从当前分支移除。
+
+## MVP 范围
+
+- 公开官网、作品列表与详情、公开制作日志
+- 询价提交、评论提交与审核
+- Django Admin 管理作品、分类、媒体、订单、客户项目、阶段和进度
+- 工作室员工与客户的自建账号密码登录
+- 客户项目、私人进度图片、查看/确认记录和项目留言
+- 服务端对象级权限：客户只能访问 `ProjectMembership` 明确授权的项目
+- MySQL 与媒体 Volume 的协调备份和隔离恢复验证
+
+在线支付、短信验证码、微信登录、通知、MinIO/S3 和摄像头直播不属于第一版。
+
+## 一键启动
+
+只需安装并启动 Docker Desktop。首次运行时，在仓库根目录执行：
+
+```powershell
+Copy-Item .env.example .env
+```
+
+打开仅供本机使用的 `.env`，替换所有 `change-me` 占位值。该文件已被 Git 忽略，不要提交。然后启动三个服务：
+
+```powershell
+docker compose up -d --build
+```
+
+后端容器会等待 MySQL 就绪，然后自动执行迁移、创建缓存表并收集静态文件。
+
+| 服务         | 本机地址                        | 说明                                |
+| ------------ | ------------------------------- | ----------------------------------- |
+| React        | `http://127.0.0.1:3000/`        | 公开网站与客户中心，支持开发热更新  |
+| Django Admin | `http://127.0.0.1:8000/admin/`  | 工作室内部管理                      |
+| REST API     | `http://127.0.0.1:8000/api/v1/` | 前端同源代理的后端接口              |
+| MySQL        | `127.0.0.1:3307`                | 只绑定本机，供本项目与 DBeaver 使用 |
+
+查看容器状态：
+
+```powershell
+docker compose ps
+```
+
+普通停止不会删除数据：
+
+```powershell
+docker compose down
+```
+
+禁止执行 `docker compose down -v`，因为 `-v` 会删除 MySQL、媒体和静态文件 Volume。
+
+## 本地验收数据
+
+本地开发数据不是正式内容，不会在生产启动时自动导入。以下命令仅在 `DJANGO_ENVIRONMENT=development` 且 `DJANGO_DEBUG=true` 时允许运行：
+
+```powershell
+docker compose exec backend python manage.py seed_dev_data
+```
+
+命令创建少量带“本地开发数据”标记的作品、公开日志、评论、客户、订单、项目、进度、私人图片和留言，并在终端中一次性显示随机临时密码。客户首次登录后必须修改临时密码。
+
+需要重建时，`--reset` 只清理明确带开发标记的数据；遇到与真实记录混合关联时会拒绝清理：
+
+```powershell
+docker compose exec backend python manage.py seed_dev_data --reset
+```
+
+也可以先预检将被清理的开发数据。该命令默认只显示数量，不会删除数据库记录或媒体文件：
+
+```powershell
+docker compose exec backend python manage.py clean_dev_data
+```
+
+人工确认预检结果后，只有明确追加 `--apply` 才会实际清理带开发标记的数据：
+
+```powershell
+docker compose exec backend python manage.py clean_dev_data --apply
+```
+
+请勿在本地验收数据中录入真实客户资料、联系方式或商业金额。
+
+## 管理员与客户账号
+
+使用交互命令创建首个管理员，密码输入不会出现在命令历史中，也没有默认管理员密码：
+
+```powershell
+docker compose exec backend python manage.py initialize_admin
+```
+
+管理员登录 Django Admin 后，可以通过用户管理创建客户账号，并在线下安全交付临时密码。客户首次登录 React 客户中心时必须修改密码，随后才能访问私人项目。项目访问必须再通过 `ProjectMembership` 显式授权。
+
+用户名统一限制为最多 18 个字符。升级现有数据库时，迁移会先检查旧账号；如存在超过 18 个字符的用户名，迁移会安全停止并报告数量，不会自动截断、重命名或删除账号。
+
+## DBeaver
+
+DBeaver 只是数据库查看工具，不参与网站运行。请创建一个全新的 MySQL 连接：
+
+- Host：`127.0.0.1`
+- Port：`.env` 中的 `MYSQL_HOST_PORT`，默认 `3307`
+- Database：`.env` 中的 `MYSQL_DATABASE`
+- Username：`.env` 中的 `MYSQL_USER`
+- Password：仅使用本项目 `.env` 中的本地密码
+
+不要连接、复用或测试已有项目的远程数据库。生产环境不会把 MySQL 3306 端口暴露到公网。
+
+## 质量检查
+
+前端完整检查：
+
+```powershell
+docker compose exec frontend npm run check
+```
+
+Django 快速检查与 SQLite 隔离测试：
+
+```powershell
+docker compose exec backend python manage.py check
+docker compose exec backend python manage.py makemigrations --check --dry-run
+docker compose exec -e DJANGO_TEST_SQLITE=true backend python manage.py test
+```
+
+使用本地 MySQL 进行完整测试时，测试进程需要临时创建和销毁 `test_` 前缀数据库。下面的 root 凭据只在数据库容器内部读取，不会写入命令或日志：
+
+```powershell
+docker compose exec backend sh -c 'MYSQL_USER=root MYSQL_PASSWORD="$MYSQL_ROOT_PASSWORD" python manage.py test'
+```
+
+GitHub Actions 会在每个 PR 上分别运行前端检查和临时 MySQL 8.4 后端检查，不执行部署。
+
+## 备份
+
+```powershell
+.\scripts\backup-local.ps1
+.\scripts\verify-backup.ps1 -BackupDirectory .\backups\<备份时间>
+```
+
+第一条命令协调备份本项目 MySQL 与媒体 Volume；第二条命令在临时数据库和临时目录中验证恢复，不覆盖活动数据。详见 [备份与恢复](docs/BACKUP_AND_RESTORE.md)。
 
 ## 目录
 
 ```text
-src/
-  components/          页面组件
-  components/admin/    后台项目、评论、分类和设置模块
-  components/gallery/  展厅子组件
-  domain/              纯校验与可见性逻辑
-  hooks/               认证和实时数据状态
-  services/firebase/   Firebase repository/service 层
-scripts/               管理员 Claim 与数据迁移脚本
-tests/                 逻辑测试和 Firebase Rules 测试
-docs/                  Firebase 配置与迁移操作文档
+backend/                 Django 项目和业务应用
+docker/                  前后端镜像、启动脚本和 MySQL 配置
+src/                     React 页面、组件、REST 客户端与数据映射
+tests/                   前端单元测试
+scripts/                 本地备份与隔离恢复验证脚本
+docs/                    架构、设计研究和阶段记录
+compose.yaml             本地三服务编排
 ```
 
-## 环境要求
+更多说明：
 
-- Node.js 22.12 或更高版本
-- npm 10 或更高版本
-- Java 21，用于本地 Firebase Rules 模拟器
+- [系统架构](docs/ARCHITECTURE.md)
+- [备份与恢复](docs/BACKUP_AND_RESTORE.md)
+- [PR #3 手工移植记录](docs/PR3_PORTING.md)
+- [Phase 2 视觉研究](docs/PHASE_2_UI_RESEARCH.md)
+- [仓库工程约束](AGENTS.md)
 
-不依赖任何固定电脑路径，也不要求在服务器上安装全局 `firebase-tools`。
-
-## 本地开发
-
-1. 安装依赖：
-
-   ```bash
-   npm ci
-   ```
-
-2. 从示例创建本地环境变量文件，并填入 Firebase Web App 的公开客户端配置：
-
-   ```bash
-   cp .env.example .env.local
-   ```
-
-3. 启动开发服务器：
-
-   ```bash
-   npm run dev
-   ```
-
-4. 打开 `http://localhost:3000`。
-
-`.env.local` 已被 Git 忽略。不要在其中放置 Admin SDK 私钥，也不要提交服务账号 JSON、访问令牌或真实管理员 UID。
-
-## 常用命令
-
-```bash
-npm run dev          # 本地开发
-npm run typecheck    # TypeScript 检查
-npm test             # 纯逻辑测试
-npm run test:rules   # Firestore + Storage Rules 模拟器测试
-npm run build        # 生产构建
-npm run check        # 类型、逻辑测试和构建
-```
-
-## Firebase 配置
-
-完整步骤见 [Firebase 配置指南](docs/FIREBASE_SETUP.md)。上线前至少需要：
-
-1. 创建或选择 Firebase 项目和 Web App。
-2. 启用 Google Authentication、Firestore 和 Storage。
-3. 配置 `.env.local`。
-4. 使用 Firebase Admin SDK 为指定 UID 设置 `admin: true` Custom Claim。
-5. 部署 `firestore.rules` 与 `storage.rules`。
-6. 用普通 Google 账号和管理员账号分别验证权限。
-
-前端不会按邮箱、邮箱验证状态或本地状态伪造管理员权限。后台只有在 Firebase ID Token 含 `admin: true` 时开放；Firestore 与 Storage Rules 会再次独立校验同一 Claim。
-
-## 管理员 Claim
-
-脚本使用 Application Default Credentials，并保留账号已有的其他 Custom Claims：
-
-```bash
-# macOS / Linux
-export FIREBASE_PROJECT_ID="your-project-id"
-export FIREBASE_ADMIN_UID="firebase-auth-uid"
-npm run admin:claim
-
-# 撤销
-npm run admin:claim -- --revoke
-```
-
-PowerShell：
-
-```powershell
-$env:FIREBASE_PROJECT_ID = "your-project-id"
-$env:FIREBASE_ADMIN_UID = "firebase-auth-uid"
-npm run admin:claim
-```
-
-Claim 更新后，该用户必须退出并重新登录，或刷新 ID Token。不要把管理员 UID 写入仓库。
-
-## 数据迁移
-
-旧远程 URL 和旧 Base64 图片在迁移前仍可显示。新上传图片全部进入 Firebase Storage，Firestore 仅保存 URL、Storage 路径和元数据。
-
-迁移脚本默认只读预检，只有追加 `--apply` 才会写入：
-
-```bash
-npm run migrate:data
-npm run migrate:data -- --apply
-```
-
-执行前必须备份 Firestore，并按照 [数据迁移指南](docs/DATA_MIGRATION.md) 配置 ADC、项目、数据库和 Bucket。脚本还会为旧项目补充可见性，为旧评论补充审核状态，并标记仓库已知的演示记录。
-
-## 安全边界
-
-- 游客只能查询 `visibility == "public"` 的项目和 `status == "approved"` 的评论。
-- 分类管理文档和隐藏分类名称仅管理员可读。
-- 新评论只能写入白名单字段，评分必须为 1-5 整数，状态必须为 `pending`。
-- Storage 只允许管理员写入 `public/`，并限制为 JPEG、PNG、WebP、GIF、AVIF 且不超过 10 MB。
-- 所有其他 Firestore 文档与 Storage 路径默认拒绝。
-
-当前直接写入 Firestore 的评论入口没有可靠的服务端频率限制或验证码。`ReviewSubmissionGateway` 已集中为单一扩展入口，后续应替换为验证 App Check/验证码并执行速率限制的 HTTPS Callable Function；在完成前不要宣称具备服务端防刷能力。
-
-## 部署
-
-先验证，再显式指定 Firebase 项目部署规则：
-
-```bash
-npm run typecheck
-npm test
-npm run build
-npm run test:rules
-npx firebase deploy --project your-project-id --only firestore:rules,storage
-```
-
-前端可将 `dist/` 部署到 Firebase Hosting、Vercel、Cloudflare Pages 或其他静态托管服务。生产环境变量应在托管平台配置，不应写入仓库。
-
-## 持续集成
-
-`.github/workflows/quality.yml` 会在 Pull Request 和 `main` 推送时使用 Node.js 22 与 Java 21 执行安装、类型检查、测试、构建和 Rules 验证。
-
-## 已知限制
-
-- 尚未接入服务端验证码、App Check 或可靠频率限制。
-- 被放弃且从未保存的临时图片上传可能形成 Storage 孤立对象；上线前应配置定期清理任务或上传暂存机制。
-- 首屏 JavaScript 包仍较大，后续可按页面做动态加载，不影响本阶段安全修复。
+当前仅用于本机开发与验收，尚未连接或部署到任何生产服务器。

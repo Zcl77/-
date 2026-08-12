@@ -1,0 +1,429 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowRight, BriefcaseBusiness, Check, LogOut, RefreshCw, Settings2, X } from 'lucide-react';
+import { decideQuote, getMyOrders, getMyProjects } from '../../services/api/repositories';
+import { LatestRequestGate, useVisiblePolling } from '../../hooks/useVisiblePolling';
+import { AuthenticatedUser, CustomerOrder, CustomerProject } from '../../types';
+import StatusNotice from '../ui/StatusNotice';
+import CustomerProjectDetail from './CustomerProjectDetail';
+import PasswordChangePanel from './PasswordChangePanel';
+
+interface CustomerPortalProps {
+  user: AuthenticatedUser;
+  selectedProjectId: string | null;
+  onOpenProject: (projectId: string) => void;
+  onBackToProjects: () => void;
+  onLogout: () => Promise<void>;
+  onChangePassword: (currentPassword: string, newPassword: string) => Promise<unknown>;
+}
+
+const PROJECT_STATUS: Record<CustomerProject['status'], string> = {
+  planning: '筹备中',
+  active: '制作中',
+  paused: '已暂停',
+  review: '待验收',
+  completed: '已完成',
+  cancelled: '已取消',
+};
+
+const ORDER_STATUS: Record<CustomerOrder['confirmationStatus'], string> = {
+  inquiry: '询价处理中',
+  proposed: '等待确认报价',
+  confirmed: '报价已接受',
+  cancelled: '订单已取消',
+};
+
+const QUOTE_DECISION: Record<CustomerOrder['quoteDecision'], string> = {
+  none: '尚未报价',
+  pending: '等待您的决定',
+  accepted: '您已接受',
+  rejected: '您已拒绝',
+};
+
+function formatAmount(value: string | null) {
+  if (!value) return '待报价';
+  const [whole, fraction = '00'] = value.split('.');
+  return `¥ ${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${fraction.padEnd(2, '0').slice(0, 2)}`;
+}
+
+function dateTime(value: string) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
+}
+
+export default function CustomerPortal({
+  user,
+  selectedProjectId,
+  onOpenProject,
+  onBackToProjects,
+  onLogout,
+  onChangePassword,
+}: CustomerPortalProps) {
+  const [projects, setProjects] = useState<CustomerProject[]>([]);
+  const [orders, setOrders] = useState<CustomerOrder[]>([]);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [error, setError] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [quoteAction, setQuoteAction] = useState<{
+    orderId: string;
+    decision: 'accepted' | 'rejected';
+  } | null>(null);
+  const [quoteMessage, setQuoteMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+  const requestGate = useRef(new LatestRequestGate());
+  const quoteSubmitting = useRef(false);
+
+  const load = useCallback(
+    async (background = false) => {
+      if (user.isStaff || user.mustChangePassword) return;
+      const isLatest = requestGate.current.issue();
+      if (!background) {
+        setStatus('loading');
+        setError(null);
+      }
+      try {
+        const [nextOrders, nextProjects] = await Promise.all([getMyOrders(), getMyProjects()]);
+        if (!isLatest()) return;
+        setOrders(nextOrders);
+        setProjects(nextProjects);
+        setStatus('ready');
+        setSyncError(null);
+      } catch (reason) {
+        if (!isLatest()) return;
+        const message = reason instanceof Error ? reason.message : '项目列表加载失败。';
+        if (background) setSyncError(message);
+        else {
+          setError(message);
+          setStatus('error');
+        }
+        throw reason;
+      }
+    },
+    [user.isStaff, user.mustChangePassword],
+  );
+
+  useEffect(() => {
+    const gate = requestGate.current;
+    void load().catch(() => undefined);
+    return () => gate.invalidate();
+  }, [load]);
+  useVisiblePolling(
+    () => load(true),
+    30_000,
+    status === 'ready' && !user.isStaff && !user.mustChangePassword,
+  );
+
+  const submitQuoteDecision = async (orderId: string, decision: 'accepted' | 'rejected') => {
+    if (quoteSubmitting.current) return;
+    quoteSubmitting.current = true;
+    setQuoteAction({ orderId, decision });
+    setQuoteMessage(null);
+    try {
+      const result = await decideQuote(orderId, decision);
+      setOrders((current) => current.map((order) => (order.id === orderId ? result.order : order)));
+      setQuoteMessage({ tone: 'success', text: result.message });
+      await load(true).catch(() => undefined);
+    } catch (reason) {
+      setQuoteMessage({
+        tone: 'error',
+        text: reason instanceof Error ? reason.message : '报价决定未能提交。',
+      });
+    } finally {
+      quoteSubmitting.current = false;
+      setQuoteAction(null);
+    }
+  };
+
+  const logout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    setLogoutError(null);
+    try {
+      await onLogout();
+    } catch (reason) {
+      setLogoutError(reason instanceof Error ? reason.message : '退出登录失败，请重试。');
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
+  return (
+    <div className="page-shell">
+      <div className="page-inner">
+        <div className="mb-8 flex flex-col justify-between gap-4 border-b border-studio-line pb-5 sm:flex-row sm:items-center">
+          <div>
+            <span className="page-kicker">Signed in</span>
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-studio-ink">
+              {user.displayName}
+              {user.isDevData && (
+                <span className="tag border-studio-warning/50 text-studio-warning">本地开发账号</span>
+              )}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void logout()}
+            disabled={loggingOut}
+            className="button-secondary self-start sm:self-auto"
+          >
+            <LogOut className="h-4 w-4" />
+            {loggingOut ? '正在退出' : '退出登录'}
+          </button>
+        </div>
+        {logoutError && (
+          <StatusNotice tone="error" compact title="退出未完成" description={logoutError} className="mb-6" />
+        )}
+
+        {user.mustChangePassword ? (
+          <PasswordChangePanel onChangePassword={onChangePassword} />
+        ) : user.isStaff ? (
+          <section className="mx-auto max-w-xl border-y border-studio-line py-10 text-center">
+            <Settings2 className="mx-auto h-6 w-6 text-studio-brass" aria-hidden="true" />
+            <h1 className="mt-4 font-serif text-2xl font-semibold text-studio-ink">工作室管理账号</h1>
+            <p className="mt-3 text-sm leading-7 text-studio-muted">
+              第一版内容、客户、订单、进度和审核统一在 Django 管理后台处理。
+            </p>
+            <a href="/admin/" className="button-primary mt-6">
+              <Settings2 className="h-4 w-4" />
+              进入管理后台
+            </a>
+          </section>
+        ) : selectedProjectId ? (
+          <CustomerProjectDetail projectId={selectedProjectId} onBack={onBackToProjects} />
+        ) : (
+          <>
+            <header className="border-b border-studio-line pb-7">
+              <span className="page-kicker">My projects</span>
+              <h1 className="page-title mt-2">我的项目</h1>
+              <p className="page-description mt-3">
+                查看真实制作阶段、最近更新、下一步计划和需要您确认的内容。
+              </p>
+            </header>
+
+            {syncError && (
+              <StatusNotice
+                tone="error"
+                compact
+                title="自动同步暂时中断"
+                description={`${syncError} 页面会自动退避重试，您也可以立即重试。`}
+                action={
+                  <button type="button" onClick={() => void load(true)} className="button-secondary">
+                    <RefreshCw className="h-4 w-4" />
+                    立即重试
+                  </button>
+                }
+                className="mt-7"
+              />
+            )}
+
+            {status === 'loading' && (
+              <StatusNotice
+                tone="loading"
+                title="正在读取我的项目"
+                description="正在核对当前账号与项目成员关系。"
+                className="mt-7"
+              />
+            )}
+            {status === 'error' && (
+              <StatusNotice
+                tone="error"
+                title="项目列表加载失败"
+                description={error || undefined}
+                action={
+                  <button
+                    type="button"
+                    onClick={() => void load().catch(() => undefined)}
+                    className="button-secondary"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    重试
+                  </button>
+                }
+                className="mt-7"
+              />
+            )}
+            {status === 'ready' && orders.length > 0 && (
+              <section className="mt-7" aria-labelledby="customer-orders-title">
+                <div className="flex items-end justify-between gap-4 border-b border-studio-line pb-3">
+                  <div>
+                    <span className="page-kicker">Quotes and orders</span>
+                    <h2 id="customer-orders-title" className="section-heading mt-2">
+                      报价与订单
+                    </h2>
+                  </div>
+                  <span className="text-[10px] text-studio-faint">线下支付记录</span>
+                </div>
+                {quoteMessage && (
+                  <StatusNotice
+                    tone={quoteMessage.tone}
+                    compact
+                    title="报价状态"
+                    description={quoteMessage.text}
+                    className="mt-4"
+                  />
+                )}
+                <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  {orders.map((order) => {
+                    const deciding = quoteAction?.orderId === order.id;
+                    const canDecide =
+                      order.confirmationStatus === 'proposed' && order.quoteDecision === 'pending';
+                    return (
+                      <article
+                        key={order.id}
+                        className="rounded-[6px] border border-studio-line bg-studio-surface p-5"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <span className="tag">{ORDER_STATUS[order.confirmationStatus]}</span>
+                            <h3 className="mt-3 font-serif text-lg font-semibold text-studio-ink">
+                              {order.orderType}
+                            </h3>
+                            <p className="mt-1 text-xs text-studio-faint">订单 {order.orderNumber}</p>
+                          </div>
+                          <strong className="font-serif text-xl text-studio-ink">
+                            {formatAmount(order.agreedAmount)}
+                          </strong>
+                        </div>
+                        <dl className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-[4px] bg-studio-line text-xs">
+                          <OrderState label="报价决定" value={QUOTE_DECISION[order.quoteDecision]} />
+                          <OrderState
+                            label="定金"
+                            value={
+                              order.depositStatus === 'recorded'
+                                ? '已记录'
+                                : order.depositStatus === 'waived'
+                                  ? '无需收取'
+                                  : '待线下确认'
+                            }
+                          />
+                          <OrderState
+                            label="尾款"
+                            value={
+                              order.finalPaymentStatus === 'recorded'
+                                ? '已记录'
+                                : order.finalPaymentStatus === 'waived'
+                                  ? '无需收取'
+                                  : '待线下确认'
+                            }
+                          />
+                          <OrderState
+                            label="交付"
+                            value={
+                              order.deliveryStatus === 'delivered'
+                                ? '已交付'
+                                : order.deliveryStatus === 'ready'
+                                  ? '待交付'
+                                  : '未交付'
+                            }
+                          />
+                        </dl>
+                        {canDecide && (
+                          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <button
+                              type="button"
+                              disabled={Boolean(quoteAction)}
+                              onClick={() => void submitQuoteDecision(order.id, 'accepted')}
+                              className="button-primary"
+                            >
+                              <Check className="h-4 w-4" />
+                              {deciding && quoteAction?.decision === 'accepted' ? '正在接受' : '接受报价'}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={Boolean(quoteAction)}
+                              onClick={() => void submitQuoteDecision(order.id, 'rejected')}
+                              className="button-secondary"
+                            >
+                              <X className="h-4 w-4" />
+                              {deciding && quoteAction?.decision === 'rejected' ? '正在拒绝' : '拒绝报价'}
+                            </button>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+            {status === 'ready' && projects.length === 0 && (
+              <StatusNotice
+                tone="empty"
+                title="当前账号尚未绑定项目"
+                description="请联系工作室核对账号或项目成员信息。"
+                className="mt-7"
+              />
+            )}
+            {status === 'ready' && projects.length > 0 && (
+              <div className="mt-7 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                {projects.map((project) => (
+                  <article
+                    key={project.id}
+                    className="rounded-[6px] border border-studio-line bg-studio-surface p-5 md:p-6"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <span className="tag">{PROJECT_STATUS[project.status]}</span>
+                        <h2 className="mt-3 font-serif text-xl font-semibold text-studio-ink">
+                          {project.name}
+                        </h2>
+                      </div>
+                      {project.unreadUpdateCount > 0 && (
+                        <span className="tag shrink-0 border-studio-warning/50 text-studio-warning">
+                          {project.unreadUpdateCount} 条未读
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-5 flex items-center justify-between text-xs text-studio-muted">
+                      <span>{project.currentStage?.name || '阶段待设置'}</span>
+                      <strong className="text-studio-ink">{project.completionPercent}%</strong>
+                    </div>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-studio-line">
+                      <span
+                        className="block h-full bg-studio-brass"
+                        style={{ width: `${project.completionPercent}%` }}
+                      />
+                    </div>
+                    <dl className="mt-5 grid grid-cols-1 gap-3 border-y border-studio-line py-4 text-xs sm:grid-cols-2">
+                      <div>
+                        <dt className="text-studio-faint">最近进度</dt>
+                        <dd className="mt-1 leading-6 text-studio-ink">
+                          {project.latestUpdate?.title || '尚未发布'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-studio-faint">更新时间</dt>
+                        <dd className="mt-1 leading-6 text-studio-ink">{dateTime(project.updatedAt)}</dd>
+                      </div>
+                    </dl>
+                    <button
+                      type="button"
+                      onClick={() => onOpenProject(project.id)}
+                      className="button-secondary mt-5 w-full"
+                    >
+                      <BriefcaseBusiness className="h-4 w-4" />
+                      查看项目详情
+                      <ArrowRight className="ml-auto h-4 w-4" />
+                    </button>
+                  </article>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function OrderState({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-studio-raised p-3">
+      <dt className="text-studio-faint">{label}</dt>
+      <dd className="mt-1 text-studio-ink">{value}</dd>
+    </div>
+  );
+}
