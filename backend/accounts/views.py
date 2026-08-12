@@ -50,7 +50,7 @@ class LoginView(APIView):
 
 @method_decorator([never_cache, csrf_protect], name="dispatch")
 class LogoutView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def post(self, request):
         logout(request)

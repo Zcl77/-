@@ -1,3 +1,5 @@
+import hashlib
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -28,41 +30,92 @@ class Order(UUIDTimeStampedModel):
         READY = "ready", "待交付"
         DELIVERED = "delivered", "已交付"
 
-    order_number = models.CharField(max_length=64, unique=True)
-    customer = models.ForeignKey(CustomerProfile, on_delete=models.PROTECT, related_name="orders")
-    order_type = models.CharField(max_length=80)
+    class QuoteDecision(models.TextChoices):
+        NONE = "none", "尚未报价"
+        PENDING = "pending", "等待客户决定"
+        ACCEPTED = "accepted", "客户已接受"
+        REJECTED = "rejected", "客户已拒绝"
+
+    order_number = models.CharField("订单编号", max_length=64, unique=True)
+    customer = models.ForeignKey(CustomerProfile, verbose_name="客户", on_delete=models.PROTECT, related_name="orders")
+    order_type = models.CharField("订单类型", max_length=80)
     confirmation_status = models.CharField(
+        "报价确认状态",
         max_length=16,
         choices=ConfirmationStatus.choices,
         default=ConfirmationStatus.INQUIRY,
     )
-    agreed_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    agreed_amount = models.DecimalField("报价金额", max_digits=12, decimal_places=2, null=True, blank=True)
+    quoted_at = models.DateTimeField("报价时间", null=True, blank=True)
+    quote_decision = models.CharField(
+        "客户报价决定",
+        max_length=16,
+        choices=QuoteDecision.choices,
+        default=QuoteDecision.NONE,
+    )
+    quote_decision_at = models.DateTimeField("客户决定时间", null=True, blank=True)
     deposit_status = models.CharField(
+        "定金状态",
         max_length=16,
         choices=PaymentRecordStatus.choices,
         default=PaymentRecordStatus.NOT_RECORDED,
     )
     final_payment_status = models.CharField(
+        "尾款状态",
         max_length=16,
         choices=PaymentRecordStatus.choices,
         default=PaymentRecordStatus.NOT_RECORDED,
     )
     delivery_status = models.CharField(
+        "交付状态",
         max_length=16,
         choices=DeliveryStatus.choices,
         default=DeliveryStatus.NOT_READY,
     )
-    notes = models.TextField(blank=True, max_length=5000)
-    is_dev_data = models.BooleanField(default=False)
+    notes = models.TextField("内部备注", blank=True, max_length=5000)
+    is_dev_data = models.BooleanField("开发测试数据", default=False)
 
     class Meta:
         ordering = ["-created_at"]
+        verbose_name = "订单"
+        verbose_name_plural = "订单"
         constraints = [
             models.CheckConstraint(
                 condition=Q(agreed_amount__isnull=True) | Q(agreed_amount__gte=0),
                 name="projects_order_amount_nonnegative",
             )
         ]
+
+    def _prepare_quote_state(self):
+        if self.confirmation_status != self.ConfirmationStatus.PROPOSED:
+            return set()
+        previous = None
+        if self.pk and not self._state.adding:
+            previous = type(self).objects.filter(pk=self.pk).values("confirmation_status", "agreed_amount").first()
+        quote_changed = (
+            previous is None
+            or previous["confirmation_status"] != self.ConfirmationStatus.PROPOSED
+            or previous["agreed_amount"] != self.agreed_amount
+        )
+        if quote_changed or self.quoted_at is None:
+            self.quoted_at = timezone.now()
+        self.quote_decision = self.QuoteDecision.PENDING
+        self.quote_decision_at = None
+        return {"quoted_at", "quote_decision", "quote_decision_at"}
+
+    def clean(self):
+        if self.confirmation_status in {
+            self.ConfirmationStatus.PROPOSED,
+            self.ConfirmationStatus.CONFIRMED,
+        } and (self.agreed_amount is None or self.agreed_amount <= 0):
+            raise ValidationError({"agreed_amount": "已报价或已确认的订单必须填写大于 0 的报价金额。"})
+        self._prepare_quote_state()
+
+    def save(self, *args, **kwargs):
+        derived_fields = self._prepare_quote_state()
+        if kwargs.get("update_fields") is not None:
+            kwargs["update_fields"] = set(kwargs["update_fields"]) | derived_fields
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.order_number
@@ -77,18 +130,20 @@ class ClientProject(UUIDTimeStampedModel):
         COMPLETED = "completed", "已完成"
         CANCELLED = "cancelled", "已取消"
 
-    order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name="projects")
-    name = models.CharField(max_length=180)
-    description = models.TextField(blank=True, max_length=10000)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PLANNING)
+    order = models.ForeignKey(Order, verbose_name="订单", on_delete=models.PROTECT, related_name="projects")
+    name = models.CharField("项目名称", max_length=180)
+    description = models.TextField("项目说明", blank=True, max_length=10000)
+    status = models.CharField("项目状态", max_length=16, choices=Status.choices, default=Status.PLANNING)
     completion_percent = models.PositiveSmallIntegerField(
+        "完成百分比",
         default=0,
         validators=[MinValueValidator(0), MaxValueValidator(100)],
     )
-    next_plan = models.CharField(max_length=500, blank=True)
-    expected_next_update_at = models.DateTimeField(null=True, blank=True)
+    next_plan = models.CharField("下一步计划", max_length=500, blank=True)
+    expected_next_update_at = models.DateTimeField("预计下次更新时间", null=True, blank=True)
     manager = models.ForeignKey(
         settings.AUTH_USER_MODEL,
+        verbose_name="项目负责人",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -97,15 +152,18 @@ class ClientProject(UUIDTimeStampedModel):
     )
     current_stage = models.ForeignKey(
         "ProductionStage",
+        verbose_name="当前制作阶段",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="current_for_projects",
     )
-    is_dev_data = models.BooleanField(default=False)
+    is_dev_data = models.BooleanField("开发测试数据", default=False)
 
     class Meta:
         ordering = ["-updated_at", "name"]
+        verbose_name = "客户项目"
+        verbose_name_plural = "客户项目"
         constraints = [
             models.CheckConstraint(
                 condition=Q(completion_percent__gte=0, completion_percent__lte=100),
@@ -128,13 +186,15 @@ class ProjectMembership(UUIDTimeStampedModel):
         OWNER = "owner", "主要客户"
         VIEWER = "viewer", "查看成员"
 
-    project = models.ForeignKey(ClientProject, on_delete=models.CASCADE, related_name="memberships")
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="project_memberships")
-    role = models.CharField(max_length=16, choices=Role.choices, default=Role.VIEWER)
-    is_active = models.BooleanField(default=True)
+    project = models.ForeignKey(ClientProject, verbose_name="客户项目", on_delete=models.CASCADE, related_name="memberships")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="客户账号", on_delete=models.CASCADE, related_name="project_memberships")
+    role = models.CharField("成员角色", max_length=16, choices=Role.choices, default=Role.VIEWER)
+    is_active = models.BooleanField("允许访问", default=True)
 
     class Meta:
         ordering = ["created_at"]
+        verbose_name = "项目成员"
+        verbose_name_plural = "项目成员"
         constraints = [models.UniqueConstraint(fields=["project", "user"], name="projects_unique_project_member")]
 
     def clean(self):
@@ -152,16 +212,18 @@ class ProductionStage(UUIDTimeStampedModel):
         COMPLETED = "completed", "已完成"
         SKIPPED = "skipped", "已跳过"
 
-    project = models.ForeignKey(ClientProject, on_delete=models.CASCADE, related_name="stages")
-    name = models.CharField(max_length=120)
-    sort_order = models.PositiveIntegerField(default=0)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
-    description = models.CharField(max_length=500, blank=True)
-    started_at = models.DateTimeField(null=True, blank=True)
-    completed_at = models.DateTimeField(null=True, blank=True)
+    project = models.ForeignKey(ClientProject, verbose_name="客户项目", on_delete=models.CASCADE, related_name="stages")
+    name = models.CharField("阶段名称", max_length=120)
+    sort_order = models.PositiveIntegerField("排序", default=0)
+    status = models.CharField("阶段状态", max_length=16, choices=Status.choices, default=Status.PENDING)
+    description = models.CharField("阶段说明", max_length=500, blank=True)
+    started_at = models.DateTimeField("开始时间", null=True, blank=True)
+    completed_at = models.DateTimeField("完成时间", null=True, blank=True)
 
     class Meta:
         ordering = ["sort_order", "created_at"]
+        verbose_name = "制作阶段"
+        verbose_name_plural = "制作阶段"
         constraints = [models.UniqueConstraint(fields=["project", "sort_order"], name="projects_unique_stage_order")]
 
     def __str__(self):
@@ -173,25 +235,28 @@ class ProgressUpdate(UUIDTimeStampedModel):
         DRAFT = "draft", "草稿"
         PUBLISHED = "published", "已发布"
 
-    project = models.ForeignKey(ClientProject, on_delete=models.CASCADE, related_name="progress_updates")
-    stage = models.ForeignKey(ProductionStage, null=True, blank=True, on_delete=models.SET_NULL, related_name="updates")
-    title = models.CharField(max_length=180)
-    body = models.TextField(max_length=12000)
-    next_plan = models.CharField(max_length=500, blank=True)
-    expected_next_update_at = models.DateTimeField(null=True, blank=True)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
-    requires_acknowledgement = models.BooleanField(default=False)
-    published_at = models.DateTimeField(null=True, blank=True)
+    project = models.ForeignKey(ClientProject, verbose_name="客户项目", on_delete=models.CASCADE, related_name="progress_updates")
+    stage = models.ForeignKey(ProductionStage, verbose_name="制作阶段", null=True, blank=True, on_delete=models.SET_NULL, related_name="updates")
+    title = models.CharField("进度标题", max_length=180)
+    body = models.TextField("进度内容", max_length=12000)
+    next_plan = models.CharField("下一步计划", max_length=500, blank=True)
+    expected_next_update_at = models.DateTimeField("预计下次更新时间", null=True, blank=True)
+    status = models.CharField("发布状态", max_length=16, choices=Status.choices, default=Status.DRAFT)
+    requires_acknowledgement = models.BooleanField("需要客户确认", default=False)
+    published_at = models.DateTimeField("发布时间", null=True, blank=True)
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
+        verbose_name="发布人",
         on_delete=models.PROTECT,
         related_name="authored_progress_updates",
         limit_choices_to={"role": User.Role.STAFF},
     )
-    is_dev_data = models.BooleanField(default=False)
+    is_dev_data = models.BooleanField("开发测试数据", default=False)
 
     class Meta:
         ordering = ["-published_at", "-created_at"]
+        verbose_name = "进度更新"
+        verbose_name_plural = "进度更新"
         constraints = [
             models.CheckConstraint(
                 condition=~Q(status="published") | Q(published_at__isnull=False),
@@ -204,10 +269,14 @@ class ProgressUpdate(UUIDTimeStampedModel):
             raise ValidationError({"stage": "制作阶段必须属于同一个客户项目。"})
         if self.author_id and self.author.role != User.Role.STAFF:
             raise ValidationError({"author": "进度发布人必须是工作室员工。"})
+        if self.status == self.Status.PUBLISHED and self.published_at is None:
+            self.published_at = timezone.now()
 
     def save(self, *args, **kwargs):
         if self.status == self.Status.PUBLISHED and self.published_at is None:
             self.published_at = timezone.now()
+            if kwargs.get("update_fields") is not None:
+                kwargs["update_fields"] = set(kwargs["update_fields"]) | {"published_at"}
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -215,14 +284,16 @@ class ProgressUpdate(UUIDTimeStampedModel):
 
 
 class ProgressImage(UUIDTimeStampedModel):
-    update = models.ForeignKey(ProgressUpdate, on_delete=models.CASCADE, related_name="images")
-    media = models.ForeignKey(MediaAsset, on_delete=models.PROTECT, related_name="progress_images")
-    caption = models.CharField(max_length=500, blank=True)
-    alt_text = models.CharField(max_length=240)
-    sort_order = models.PositiveIntegerField(default=0)
+    update = models.ForeignKey(ProgressUpdate, verbose_name="进度更新", on_delete=models.CASCADE, related_name="images")
+    media = models.ForeignKey(MediaAsset, verbose_name="媒体文件", on_delete=models.PROTECT, related_name="progress_images")
+    caption = models.CharField("图片说明", max_length=500, blank=True)
+    alt_text = models.CharField("替代文字", max_length=240)
+    sort_order = models.PositiveIntegerField("排序", default=0)
 
     class Meta:
         ordering = ["sort_order", "created_at"]
+        verbose_name = "进度图片"
+        verbose_name_plural = "进度图片"
         constraints = [models.UniqueConstraint(fields=["update", "sort_order"], name="projects_unique_progress_image_order")]
 
     def clean(self):
@@ -234,12 +305,14 @@ class ProgressImage(UUIDTimeStampedModel):
 
 
 class ProgressReceipt(UUIDTimeStampedModel):
-    update = models.ForeignKey(ProgressUpdate, on_delete=models.CASCADE, related_name="receipts")
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="progress_receipts")
-    viewed_at = models.DateTimeField(null=True, blank=True)
-    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    update = models.ForeignKey(ProgressUpdate, verbose_name="进度更新", on_delete=models.CASCADE, related_name="receipts")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="客户账号", on_delete=models.CASCADE, related_name="progress_receipts")
+    viewed_at = models.DateTimeField("查看时间", null=True, blank=True)
+    acknowledged_at = models.DateTimeField("确认时间", null=True, blank=True)
 
     class Meta:
+        verbose_name = "进度确认记录"
+        verbose_name_plural = "进度确认记录"
         constraints = [models.UniqueConstraint(fields=["update", "user"], name="projects_unique_progress_receipt")]
 
     def clean(self):
@@ -252,16 +325,31 @@ class ProgressReceipt(UUIDTimeStampedModel):
             if not is_member:
                 raise ValidationError({"user": "进度回执用户必须是该项目的有效成员。"})
 
+    def __str__(self):
+        state = "已确认" if self.acknowledged_at else "已查看" if self.viewed_at else "未查看"
+        return f"{self.update.project} / {self.user} / {self.update.title} / {state}"
+
 
 class ProjectMessage(UUIDTimeStampedModel):
-    project = models.ForeignKey(ClientProject, on_delete=models.CASCADE, related_name="messages")
-    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="project_messages")
-    body = models.TextField(max_length=3000)
-    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="replies")
-    is_dev_data = models.BooleanField(default=False)
+    project = models.ForeignKey(ClientProject, verbose_name="客户项目", on_delete=models.CASCADE, related_name="messages")
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="留言人", on_delete=models.PROTECT, related_name="project_messages")
+    body = models.TextField("留言内容", max_length=3000)
+    parent = models.ForeignKey("self", verbose_name="回复的留言", null=True, blank=True, on_delete=models.SET_NULL, related_name="replies")
+    idempotency_key = models.CharField("幂等标识", max_length=64, null=True, blank=True, unique=True, editable=False)
+    submission_fingerprint = models.CharField("防重复指纹", max_length=64, editable=False, db_index=True)
+    submission_bucket = models.PositiveBigIntegerField("防重复时间段", editable=False)
+    is_dev_data = models.BooleanField("开发测试数据", default=False)
 
     class Meta:
         ordering = ["created_at"]
+        verbose_name = "项目留言"
+        verbose_name_plural = "项目留言"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["submission_fingerprint", "submission_bucket"],
+                name="projects_message_short_dedupe",
+            )
+        ]
 
     def clean(self):
         if self.parent_id and self.parent.project_id != self.project_id:
@@ -278,13 +366,26 @@ class ProjectMessage(UUIDTimeStampedModel):
     def __str__(self):
         return f"{self.project} / {self.author} / {self.created_at:%Y-%m-%d %H:%M}"
 
+    def build_submission_fingerprint(self):
+        normalized = "|".join(
+            [str(self.project_id), str(self.author_id), str(self.parent_id or ""), self.body.strip().casefold()]
+        )
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+    def save(self, *args, **kwargs):
+        self.submission_fingerprint = self.submission_fingerprint or self.build_submission_fingerprint()
+        self.submission_bucket = self.submission_bucket or int(timezone.now().timestamp() // 60)
+        super().save(*args, **kwargs)
+
 
 class ProjectMessageReceipt(UUIDTimeStampedModel):
-    message = models.ForeignKey(ProjectMessage, on_delete=models.CASCADE, related_name="receipts")
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="message_receipts")
-    read_at = models.DateTimeField(null=True, blank=True)
+    message = models.ForeignKey(ProjectMessage, verbose_name="项目留言", on_delete=models.CASCADE, related_name="receipts")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="查看账号", on_delete=models.CASCADE, related_name="message_receipts")
+    read_at = models.DateTimeField("阅读时间", null=True, blank=True)
 
     class Meta:
+        verbose_name = "留言阅读记录"
+        verbose_name_plural = "留言阅读记录"
         constraints = [models.UniqueConstraint(fields=["message", "user"], name="projects_unique_message_receipt")]
 
     def clean(self):
@@ -296,3 +397,7 @@ class ProjectMessageReceipt(UUIDTimeStampedModel):
             ).exists()
             if not is_member:
                 raise ValidationError({"user": "留言回执用户必须是该项目的有效成员。"})
+
+    def __str__(self):
+        state = "已读" if self.read_at else "未读"
+        return f"{self.message.project} / {self.user} / {state}"

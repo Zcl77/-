@@ -37,6 +37,31 @@ def has_development_data():
     return any(queryset.exists() for queryset in querysets)
 
 
+def development_data_counts():
+    from accounts.models import CustomerProfile, User
+    from interactions.models import Inquiry, Review
+    from media_library.models import MediaAsset
+    from portfolio.models import Category, PublicProcessPost, StudioSetting, Work
+    from projects.models import ClientProject, Order, ProgressUpdate, ProjectMessage
+
+    targets = (
+        (Review, "评价"),
+        (Inquiry, "询价"),
+        (ProjectMessage, "项目留言"),
+        (ProgressUpdate, "项目进度"),
+        (ClientProject, "客户项目"),
+        (Order, "订单"),
+        (CustomerProfile, "客户资料"),
+        (PublicProcessPost, "公开制作日志"),
+        (Work, "公开作品"),
+        (StudioSetting, "站点资料"),
+        (Category, "作品分类"),
+        (User, "开发账号"),
+        (MediaAsset, "媒体文件"),
+    )
+    return {label: model.objects.filter(is_dev_data=True).count() for model, label in targets}
+
+
 def clear_development_data():
     from accounts.models import CustomerProfile, User
     from interactions.models import Inquiry, Review
@@ -58,16 +83,14 @@ def clear_development_data():
         (Category, "作品分类"),
         (User, "开发账号"),
     )
-    counts = {}
+    counts = development_data_counts()
     try:
         with transaction.atomic():
             for model, label in targets:
                 queryset = model.objects.filter(is_dev_data=True)
-                counts[label] = queryset.count()
                 queryset.delete()
 
             assets = list(MediaAsset.objects.filter(is_dev_data=True))
-            counts["媒体文件"] = len(assets)
             for asset in assets:
                 asset.delete()
     except ProtectedError as exc:

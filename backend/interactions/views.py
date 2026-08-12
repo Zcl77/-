@@ -27,9 +27,15 @@ class ReviewListCreateView(ListCreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         review = serializer.save()
+        duplicate = getattr(serializer, "was_duplicate", False)
         return Response(
-            {"id": str(review.pk), "status": review.status, "message": "评价已提交，审核通过后公开。"},
-            status=status.HTTP_201_CREATED,
+            {
+                "id": str(review.pk),
+                "status": review.status,
+                "duplicate": duplicate,
+                "message": "该评价已经提交，请勿重复操作。" if duplicate else "评价已提交，审核通过后公开。",
+            },
+            status=status.HTTP_200_OK if duplicate else status.HTTP_201_CREATED,
         )
 
 
@@ -39,10 +45,16 @@ class InquirySubmissionView(APIView):
     throttle_scope = "inquiry-submit"
 
     def post(self, request):
-        serializer = InquirySubmissionSerializer(data=request.data)
+        serializer = InquirySubmissionSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         inquiry = serializer.save()
+        duplicate = getattr(serializer, "was_duplicate", False)
         return Response(
-            {"id": str(inquiry.pk), "status": inquiry.status, "message": "询价已提交，工作室将根据所留方式联系您。"},
-            status=status.HTTP_201_CREATED,
+            {
+                "id": str(inquiry.pk),
+                "status": inquiry.status,
+                "duplicate": duplicate,
+                "message": "该询价已经提交，请勿重复操作。" if duplicate else "询价已提交，工作室将根据所留方式联系您。",
+            },
+            status=status.HTTP_200_OK if duplicate else status.HTTP_201_CREATED,
         )

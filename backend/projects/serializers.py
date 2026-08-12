@@ -29,6 +29,9 @@ class OrderSerializer(StrictModelSerializer):
             "order_type",
             "confirmation_status",
             "agreed_amount",
+            "quoted_at",
+            "quote_decision",
+            "quote_decision_at",
             "deposit_status",
             "final_payment_status",
             "delivery_status",
@@ -36,6 +39,12 @@ class OrderSerializer(StrictModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+
+class QuoteDecisionSerializer(StrictSerializer):
+    decision = serializers.ChoiceField(
+        choices=(Order.QuoteDecision.ACCEPTED, Order.QuoteDecision.REJECTED),
+    )
 
 
 class ProductionStageSerializer(StrictModelSerializer):

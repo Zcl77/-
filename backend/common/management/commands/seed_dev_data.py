@@ -34,6 +34,7 @@ from projects.models import (
     ProjectMembership,
     ProjectMessage,
 )
+from projects.services import ensure_project_scaffold
 
 
 STAGE_NAMES = (
@@ -263,6 +264,7 @@ class Command(BaseCommand):
                         "is_active": True,
                     },
                 )
+                ensure_project_scaffold(project.pk)
                 stages = list(project.stages.order_by("sort_order"))
                 for index, (stage, name) in enumerate(zip(stages, STAGE_NAMES, strict=True)):
                     status = ProductionStage.Status.PENDING

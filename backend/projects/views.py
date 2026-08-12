@@ -1,4 +1,4 @@
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -11,7 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError as ApiValidationError
 
 from common.permissions import HasCompletedPasswordChange, IsCustomerOrStaff
 
@@ -32,7 +32,9 @@ from .serializers import (
     ProjectMessageCreateSerializer,
     ProjectMessageSerializer,
     ProjectSummarySerializer,
+    QuoteDecisionSerializer,
 )
+from .services import decide_quote
 
 
 PRIVATE_PERMISSIONS = [IsAuthenticated, HasCompletedPasswordChange, IsCustomerOrStaff]
@@ -88,6 +90,38 @@ class OrderListView(PrivateListView):
 
     def get_queryset(self):
         return accessible_orders(self.request.user).select_related("customer").order_by("-created_at")
+
+
+@method_decorator([never_cache, csrf_protect], name="dispatch")
+class QuoteDecisionView(APIView):
+    permission_classes = PRIVATE_PERMISSIONS
+    throttle_scope = "quote-decision"
+
+    def post(self, request, order_id):
+        if request.user.is_staff:
+            raise PermissionDenied("工作室账号不能代替客户提交报价决定。")
+        get_object_or_404(accessible_orders(request.user), pk=order_id)
+        serializer = QuoteDecisionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            order, changed = decide_quote(
+                order_id=order_id,
+                customer_user=request.user,
+                decision=serializer.validated_data["decision"],
+            )
+        except Exception as exc:
+            from django.core.exceptions import ValidationError as DjangoValidationError
+
+            if isinstance(exc, DjangoValidationError):
+                raise ApiValidationError(exc.messages) from exc
+            raise
+        return Response(
+            {
+                "order": OrderSerializer(order).data,
+                "changed": changed,
+                "message": "报价决定已记录。" if changed else "该报价决定已经记录，无需重复提交。",
+            }
+        )
 
 
 @method_decorator(never_cache, name="dispatch")
@@ -206,6 +240,14 @@ class ProjectMessageListCreateView(APIView):
             raise PermissionDenied("当前工作室账号无权发送项目留言。")
         serializer = ProjectMessageCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        idempotency_key = request.headers.get("Idempotency-Key", "").strip() or None
+        if idempotency_key and len(idempotency_key) > 64:
+            raise ApiValidationError("重复提交标识无效。")
+        if idempotency_key:
+            existing = project.messages.filter(author=request.user, idempotency_key=idempotency_key).first()
+            if existing:
+                output = ProjectMessageSerializer(existing, context={"request": request})
+                return Response(output.data)
         parent_id = serializer.validated_data.get("parent_id")
         parent = get_object_or_404(project.messages, pk=parent_id) if parent_id else None
         message = ProjectMessage(
@@ -213,9 +255,32 @@ class ProjectMessageListCreateView(APIView):
             author=request.user,
             parent=parent,
             body=serializer.validated_data["body"],
+            idempotency_key=idempotency_key,
             is_dev_data=False,
         )
-        message.full_clean()
-        message.save()
+        message.submission_fingerprint = message.build_submission_fingerprint()
+        message.submission_bucket = int(timezone.now().timestamp() // 60)
+        existing = project.messages.filter(
+            submission_fingerprint=message.submission_fingerprint,
+            submission_bucket=message.submission_bucket,
+        ).first()
+        if existing:
+            output = ProjectMessageSerializer(existing, context={"request": request})
+            return Response(output.data)
+        message.full_clean(validate_unique=False, validate_constraints=False)
+        try:
+            with transaction.atomic():
+                message.save(force_insert=True)
+        except IntegrityError:
+            message = project.messages.filter(
+                submission_fingerprint=message.submission_fingerprint,
+                submission_bucket=message.submission_bucket,
+            ).first()
+            if message is None and idempotency_key:
+                message = project.messages.filter(author=request.user, idempotency_key=idempotency_key).first()
+            if message is None:
+                raise
+            output = ProjectMessageSerializer(message, context={"request": request})
+            return Response(output.data)
         output = ProjectMessageSerializer(message, context={"request": request})
         return Response(output.data, status=status.HTTP_201_CREATED)

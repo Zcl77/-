@@ -58,7 +58,12 @@ class DevelopmentDataCommandTests(TransactionTestCase):
             with self.assertRaises(CommandError):
                 call_command("seed_dev_data", stdout=io.StringIO())
 
-            call_command("clean_dev_data", stdout=io.StringIO())
+            preview = io.StringIO()
+            call_command("clean_dev_data", stdout=preview)
+            self.assertIn("仅预检", preview.getvalue())
+            self.assertTrue(User.objects.filter(is_dev_data=True).exists())
+
+            call_command("clean_dev_data", "--apply", stdout=io.StringIO())
 
         self.assertFalse(User.objects.filter(is_dev_data=True).exists())
         self.assertFalse(MediaAsset.objects.filter(is_dev_data=True).exists())

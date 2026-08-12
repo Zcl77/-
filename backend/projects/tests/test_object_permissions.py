@@ -1,10 +1,11 @@
 import tempfile
 
+from django.contrib.auth.models import Permission
 from django.test import TransactionTestCase, override_settings
 from rest_framework.test import APIClient
 
 from accounts.models import CustomerProfile, User
-from common.tests.utils import TEST_PASSWORD, image_upload
+from common.tests.utils import TEST_PASSWORD, csrf_token, image_upload
 from media_library.models import MediaAsset
 
 from projects.models import ClientProject, Order, ProgressImage, ProgressUpdate, ProjectMessage
@@ -22,7 +23,7 @@ class CustomerObjectPermissionTests(TransactionTestCase):
         self.addCleanup(self.settings_override.disable)
 
         self.staff = User.objects.create_superuser(
-            username="staff-permission-test",
+            username="permission-staff",
             password=TEST_PASSWORD,
             must_change_password=False,
         )
@@ -150,12 +151,86 @@ class CustomerObjectPermissionTests(TransactionTestCase):
         self.assertEqual(media_response.status_code, 200)
         media_response.close()
 
+    def test_customer_never_sees_draft_progress_and_messages_are_idempotent(self):
+        draft = ProgressUpdate.objects.create(
+            project=self.project_b,
+            title="不应公开的草稿",
+            body="客户不能看到。",
+            status=ProgressUpdate.Status.DRAFT,
+            author=self.staff,
+            is_dev_data=True,
+        )
+        client = self.logged_in_client(self.customer_b)
+        updates = client.get(f"/api/v1/me/projects/{self.project_b.pk}/updates").json()["results"]
+        self.assertNotIn(str(draft.pk), [item["id"] for item in updates])
+
+        url = f"/api/v1/me/projects/{self.project_b.pk}/messages"
+        headers = {"HTTP_IDEMPOTENCY_KEY": "message-idempotency-test"}
+        first = client.post(url, {"body": "只保存一次的留言"}, format="json", **headers)
+        second = client.post(url, {"body": "只保存一次的留言"}, format="json", **headers)
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(ProjectMessage.objects.filter(body="只保存一次的留言").count(), 1)
+
     def test_superuser_can_view_projects_and_private_media(self):
         client = self.logged_in_client(self.staff)
         self.assertEqual(client.get(f"/api/v1/me/projects/{self.project_b.pk}").status_code, 200)
         media_response = client.get(f"/api/v1/me/media/{self.private_asset_b.pk}")
         self.assertEqual(media_response.status_code, 200)
         media_response.close()
+
+    def test_ordinary_staff_requires_explicit_model_permissions(self):
+        staff = User.objects.create_user(
+            username="limited-staff",
+            password=TEST_PASSWORD,
+            is_staff=True,
+            must_change_password=False,
+        )
+        client = self.logged_in_client(staff)
+
+        self.assertEqual(client.get("/api/v1/me/orders").json()["results"], [])
+        self.assertEqual(client.get("/api/v1/me/projects").json()["results"], [])
+        self.assertEqual(client.get(f"/api/v1/me/projects/{self.project_b.pk}").status_code, 404)
+        self.assertEqual(client.get(f"/api/v1/me/media/{self.private_asset_b.pk}").status_code, 404)
+
+        staff.user_permissions.add(
+            Permission.objects.get(codename="view_order"),
+            Permission.objects.get(codename="view_clientproject"),
+            Permission.objects.get(codename="view_mediaasset"),
+        )
+        staff = User.objects.get(pk=staff.pk)
+        client = self.logged_in_client(staff)
+
+        self.assertEqual(len(client.get("/api/v1/me/orders").json()["results"]), 2)
+        self.assertEqual(len(client.get("/api/v1/me/projects").json()["results"]), 2)
+        self.assertEqual(client.get(f"/api/v1/me/projects/{self.project_b.pk}").status_code, 200)
+        media_response = client.get(f"/api/v1/me/media/{self.private_asset_b.pk}")
+        self.assertEqual(media_response.status_code, 200)
+        media_response.close()
+
+    def test_private_write_endpoints_require_csrf(self):
+        client = APIClient(enforce_csrf_checks=True)
+        client.force_login(self.customer_b)
+        quote = Order.objects.create(
+            order_number="TEST-CSRF-QUOTE",
+            customer=self.order_b.customer,
+            order_type="安全测试订单",
+            confirmation_status=Order.ConfirmationStatus.PROPOSED,
+            agreed_amount="100.00",
+        )
+
+        quote_url = f"/api/v1/me/orders/{quote.pk}/quote-decision"
+        message_url = f"/api/v1/me/projects/{self.project_b.pk}/messages"
+        acknowledge_url = f"/api/v1/me/projects/{self.project_b.pk}/updates/{self.update_b.pk}/acknowledge"
+        self.assertEqual(client.post(quote_url, {"decision": "accepted"}, format="json").status_code, 403)
+        self.assertEqual(client.post(message_url, {"body": "缺少 CSRF"}, format="json").status_code, 403)
+        self.assertEqual(client.post(acknowledge_url, format="json").status_code, 403)
+
+        token = csrf_token(client)
+        self.assertEqual(
+            client.post(message_url, {"body": "通过 CSRF 校验"}, format="json", HTTP_X_CSRFTOKEN=token).status_code,
+            201,
+        )
 
     def test_anonymous_and_temporary_password_sessions_are_blocked(self):
         self.assertIn(APIClient().get("/api/v1/me/projects").status_code, {401, 403})

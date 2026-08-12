@@ -24,14 +24,18 @@ if not SECRET_KEY:
 
 DEBUG = env_bool("DJANGO_DEBUG")
 ENVIRONMENT = os.getenv("DJANGO_ENVIRONMENT", "production").strip().lower()
-ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,backend")
+development_hosts = "localhost,127.0.0.1,backend" if DEBUG or TESTING else ""
+ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", development_hosts)
+if not ALLOWED_HOSTS:
+    raise ImproperlyConfigured("DJANGO_ALLOWED_HOSTS must be explicitly configured in production.")
 CSRF_TRUSTED_ORIGINS = env_list(
     "DJANGO_CSRF_TRUSTED_ORIGINS",
-    "http://localhost:3000,http://127.0.0.1:3000",
+    "http://localhost:3000,http://127.0.0.1:3000" if DEBUG else "",
 )
 
 INSTALLED_APPS = [
     "axes",
+    "corsheaders",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -50,6 +54,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -131,9 +136,9 @@ MEDIA_ROOT = Path(os.getenv("DJANGO_MEDIA_ROOT", BASE_DIR / "media"))
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE")
+SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE", default=not DEBUG)
 SESSION_COOKIE_SAMESITE = "Lax"
-CSRF_COOKIE_SECURE = env_bool("DJANGO_CSRF_COOKIE_SECURE")
+CSRF_COOKIE_SECURE = env_bool("DJANGO_CSRF_COOKIE_SECURE", default=not DEBUG)
 CSRF_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_HTTPONLY = False
 SESSION_COOKIE_AGE = 60 * 60 * 12
@@ -143,9 +148,12 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "same-origin"
 X_FRAME_OPTIONS = "DENY"
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT")
-SECURE_HSTS_SECONDS = int(os.getenv("DJANGO_SECURE_HSTS_SECONDS", "0"))
+SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", default=not DEBUG and not TESTING)
+SECURE_HSTS_SECONDS = int(
+    os.getenv("DJANGO_SECURE_HSTS_SECONDS", "31536000" if not DEBUG and not TESTING else "0")
+)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS")
+SECURE_HSTS_PRELOAD = env_bool("DJANGO_SECURE_HSTS_PRELOAD")
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 17 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 16 * 1024 * 1024
@@ -158,7 +166,7 @@ CACHES = {
 }
 
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
+    "DEFAULT_AUTHENTICATION_CLASSES": ["common.authentication.ApiSessionAuthentication"],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.ScopedRateThrottle"],
@@ -167,11 +175,19 @@ REST_FRAMEWORK = {
         "review-submit": "6/hour",
         "inquiry-submit": "5/hour",
         "project-message": "30/hour",
+        "quote-decision": "12/hour",
     },
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
     "EXCEPTION_HANDLER": "common.exceptions.api_exception_handler",
 }
+
+CORS_ALLOWED_ORIGINS = env_list("DJANGO_CORS_ALLOWED_ORIGINS")
+CORS_ALLOW_CREDENTIALS = True
+CSRF_FAILURE_VIEW = "common.views.csrf_failure"
+FRONTEND_SITE_URL = os.getenv("FRONTEND_SITE_URL", "").strip() or (
+    "http://127.0.0.1:3000/" if DEBUG else None
+)
 
 AXES_FAILURE_LIMIT = 5
 AXES_COOLOFF_TIME = timedelta(minutes=15)

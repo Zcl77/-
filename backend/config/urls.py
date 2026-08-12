@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
 
@@ -15,3 +16,4 @@ urlpatterns = [
 admin.site.site_header = "知行造境管理后台"
 admin.site.site_title = "知行造境"
 admin.site.index_title = "内容与客户项目管理"
+admin.site.site_url = settings.FRONTEND_SITE_URL

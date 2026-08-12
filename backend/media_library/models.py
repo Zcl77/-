@@ -36,30 +36,33 @@ class MediaAsset(UUIDTimeStampedModel):
         INQUIRY = "inquiry", "询价附件"
         STUDIO = "studio", "工作室资料"
 
-    access = models.CharField(max_length=16, choices=Access.choices)
-    kind = models.CharField(max_length=32, choices=Kind.choices)
-    original = models.ImageField(upload_to=original_upload_path, max_length=500)
-    display = models.ImageField(upload_to=display_upload_path, max_length=500, blank=True)
-    thumbnail = models.ImageField(upload_to=thumbnail_upload_path, max_length=500, blank=True)
-    original_name = models.CharField(max_length=255, editable=False, blank=True)
-    declared_content_type = models.CharField(max_length=100, editable=False, blank=True)
-    detected_content_type = models.CharField(max_length=100, editable=False, blank=True)
-    size_bytes = models.PositiveBigIntegerField(editable=False, default=0)
-    width = models.PositiveIntegerField(editable=False, default=0)
-    height = models.PositiveIntegerField(editable=False, default=0)
-    sha256 = models.CharField(max_length=64, db_index=True, editable=False, blank=True)
+    access = models.CharField("访问范围", max_length=16, choices=Access.choices)
+    kind = models.CharField("媒体用途", max_length=32, choices=Kind.choices)
+    original = models.ImageField("原始图片", upload_to=original_upload_path, max_length=500)
+    display = models.ImageField("展示图片", upload_to=display_upload_path, max_length=500, blank=True)
+    thumbnail = models.ImageField("缩略图", upload_to=thumbnail_upload_path, max_length=500, blank=True)
+    original_name = models.CharField("原文件名", max_length=255, editable=False, blank=True)
+    declared_content_type = models.CharField("上传声明类型", max_length=100, editable=False, blank=True)
+    detected_content_type = models.CharField("实际文件类型", max_length=100, editable=False, blank=True)
+    size_bytes = models.PositiveBigIntegerField("文件大小（字节）", editable=False, default=0)
+    width = models.PositiveIntegerField("宽度", editable=False, default=0)
+    height = models.PositiveIntegerField("高度", editable=False, default=0)
+    sha256 = models.CharField("文件指纹", max_length=64, db_index=True, editable=False, blank=True)
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
+        verbose_name="上传人",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="uploaded_media",
     )
-    is_dev_data = models.BooleanField(default=False)
+    is_dev_data = models.BooleanField("开发测试数据", default=False)
 
     class Meta:
         ordering = ["-created_at"]
         indexes = [models.Index(fields=["access", "kind", "created_at"])]
+        verbose_name = "媒体文件"
+        verbose_name_plural = "媒体文件"
 
     def __str__(self):
         return self.original_name

@@ -1,5 +1,5 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -47,10 +47,43 @@ class ReviewSubmissionSerializer(StrictSerializer):
 
     def create(self, validated_data):
         validated_data.pop("work_slug", None)
-        review = Review(**validated_data, status=Review.Status.PENDING, is_dev_data=False)
-        review.full_clean()
-        review.save()
-        return review
+        request = self.context.get("request")
+        idempotency_key = (request.headers.get("Idempotency-Key", "") if request else "").strip() or None
+        if idempotency_key and len(idempotency_key) > 64:
+            raise serializers.ValidationError({"idempotency_key": "重复提交标识无效。"})
+
+        candidate = Review(
+            **validated_data,
+            status=Review.Status.PENDING,
+            is_dev_data=False,
+            idempotency_key=idempotency_key,
+        )
+        candidate.submission_fingerprint = candidate.build_submission_fingerprint()
+        candidate.submission_bucket = int(timezone.now().timestamp() // 600)
+        candidate.full_clean(validate_unique=False, validate_constraints=False)
+
+        with transaction.atomic():
+            if idempotency_key:
+                existing = Review.objects.filter(idempotency_key=idempotency_key).first()
+                if existing:
+                    self.was_duplicate = True
+                    return existing
+            try:
+                with transaction.atomic():
+                    candidate.save(force_insert=True)
+            except IntegrityError:
+                existing = Review.objects.filter(
+                    submission_fingerprint=candidate.submission_fingerprint,
+                    submission_bucket=candidate.submission_bucket,
+                ).first()
+                if existing is None and idempotency_key:
+                    existing = Review.objects.filter(idempotency_key=idempotency_key).first()
+                if existing is None:
+                    raise
+                self.was_duplicate = True
+                return existing
+        self.was_duplicate = False
+        return candidate
 
 
 class InquirySubmissionSerializer(StrictSerializer):
@@ -83,12 +116,47 @@ class InquirySubmissionSerializer(StrictSerializer):
 
     def create(self, validated_data):
         attachments = validated_data.pop("attachments", [])
+        request = self.context.get("request")
+        idempotency_key = (request.headers.get("Idempotency-Key", "") if request else "").strip() or None
+        if idempotency_key and len(idempotency_key) > 64:
+            raise serializers.ValidationError({"idempotency_key": "重复提交标识无效。"})
         created_assets = []
         try:
             with transaction.atomic():
-                inquiry = Inquiry(**validated_data, status=Inquiry.Status.NEW, is_dev_data=False)
-                inquiry.full_clean()
-                inquiry.save()
+                inquiry = Inquiry(
+                    **validated_data,
+                    status=Inquiry.Status.NEW,
+                    is_dev_data=False,
+                    idempotency_key=idempotency_key,
+                )
+                inquiry.submission_fingerprint = inquiry.build_submission_fingerprint()
+                inquiry.submission_bucket = int(timezone.now().timestamp() // 600)
+                inquiry.full_clean(validate_unique=False, validate_constraints=False)
+                existing = None
+                if idempotency_key:
+                    existing = Inquiry.objects.filter(idempotency_key=idempotency_key).first()
+                if existing is None:
+                    existing = Inquiry.objects.filter(
+                        submission_fingerprint=inquiry.submission_fingerprint,
+                        submission_bucket=inquiry.submission_bucket,
+                    ).first()
+                if existing:
+                    self.was_duplicate = True
+                    return existing
+                try:
+                    with transaction.atomic():
+                        inquiry.save(force_insert=True)
+                except IntegrityError:
+                    existing = Inquiry.objects.filter(
+                        submission_fingerprint=inquiry.submission_fingerprint,
+                        submission_bucket=inquiry.submission_bucket,
+                    ).first()
+                    if existing is None and idempotency_key:
+                        existing = Inquiry.objects.filter(idempotency_key=idempotency_key).first()
+                    if existing is None:
+                        raise
+                    self.was_duplicate = True
+                    return existing
                 for index, upload in enumerate(attachments):
                     asset = MediaAsset(
                         access=MediaAsset.Access.PRIVATE,
@@ -102,6 +170,7 @@ class InquirySubmissionSerializer(StrictSerializer):
                     link = InquiryAttachment(inquiry=inquiry, media=asset, sort_order=index)
                     link.full_clean()
                     link.save()
+                self.was_duplicate = False
                 return inquiry
         except DjangoValidationError as exc:
             for asset in created_assets:
