@@ -80,10 +80,16 @@ docker compose exec backend python manage.py seed_dev_data
 docker compose exec backend python manage.py seed_dev_data --reset
 ```
 
-也可以只清理开发数据：
+也可以先预检将被清理的开发数据。该命令默认只显示数量，不会删除数据库记录或媒体文件：
 
 ```powershell
 docker compose exec backend python manage.py clean_dev_data
+```
+
+人工确认预检结果后，只有明确追加 `--apply` 才会实际清理带开发标记的数据：
+
+```powershell
+docker compose exec backend python manage.py clean_dev_data --apply
 ```
 
 请勿在本地验收数据中录入真实客户资料、联系方式或商业金额。
@@ -97,6 +103,8 @@ docker compose exec backend python manage.py initialize_admin
 ```
 
 管理员登录 Django Admin 后，可以通过用户管理创建客户账号，并在线下安全交付临时密码。客户首次登录 React 客户中心时必须修改密码，随后才能访问私人项目。项目访问必须再通过 `ProjectMembership` 显式授权。
+
+用户名统一限制为最多 18 个字符。升级现有数据库时，迁移会先检查旧账号；如存在超过 18 个字符的用户名，迁移会安全停止并报告数量，不会自动截断、重命名或删除账号。
 
 ## DBeaver
 
