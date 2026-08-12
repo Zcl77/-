@@ -103,6 +103,9 @@ interface RawOrder {
   order_type: string;
   confirmation_status: CustomerOrder['confirmationStatus'];
   agreed_amount: string | null;
+  quoted_at: string | null;
+  quote_decision: CustomerOrder['quoteDecision'];
+  quote_decision_at: string | null;
   deposit_status: CustomerOrder['depositStatus'];
   final_payment_status: CustomerOrder['finalPaymentStatus'];
   delivery_status: CustomerOrder['deliveryStatus'];
@@ -238,6 +241,9 @@ function mapOrder(order: RawOrder): CustomerOrder {
     orderType: order.order_type,
     confirmationStatus: order.confirmation_status,
     agreedAmount: order.agreed_amount,
+    quotedAt: order.quoted_at,
+    quoteDecision: order.quote_decision,
+    quoteDecisionAt: order.quote_decision_at,
     depositStatus: order.deposit_status,
     finalPaymentStatus: order.final_payment_status,
     deliveryStatus: order.delivery_status,
@@ -319,8 +325,9 @@ export async function getPublicSiteData() {
 }
 
 export async function submitReview(input: ReviewInput): Promise<string> {
-  const response = await apiRequest<{ id: string }>('/reviews', {
+  const response = await apiRequest<{ id: string; message: string }>('/reviews', {
     method: 'POST',
+    headers: { 'Idempotency-Key': crypto.randomUUID() },
     body: JSON.stringify({
       reviewer_name: input.reviewerName,
       rating: input.rating,
@@ -329,7 +336,7 @@ export async function submitReview(input: ReviewInput): Promise<string> {
       ...(input.workSlug ? { work_slug: input.workSlug } : {}),
     }),
   });
-  return response.id;
+  return response.message;
 }
 
 export async function submitInquiry(input: InquiryInput): Promise<string> {
@@ -344,8 +351,12 @@ export async function submitInquiry(input: InquiryInput): Promise<string> {
   form.append('description', input.description);
   form.append('privacy_consent', input.privacyConsent ? 'true' : 'false');
   input.attachments.forEach((file) => form.append('attachments', file));
-  const response = await apiRequest<{ id: string }>('/inquiries', { method: 'POST', body: form });
-  return response.id;
+  const response = await apiRequest<{ id: string; message: string }>('/inquiries', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': crypto.randomUUID() },
+    body: form,
+  });
+  return response.message;
 }
 
 export function getCurrentUser(): Promise<CurrentUser> {
@@ -372,6 +383,17 @@ export function changePassword(currentPassword: string, newPassword: string) {
 
 export async function getMyOrders(): Promise<CustomerOrder[]> {
   return (await apiGetAll<RawOrder>('/me/orders')).map(mapOrder);
+}
+
+export async function decideQuote(orderId: string, decision: 'accepted' | 'rejected') {
+  const response = await apiRequest<{ order: RawOrder; changed: boolean; message: string }>(
+    `/me/orders/${orderId}/quote-decision`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ decision }),
+    },
+  );
+  return { order: mapOrder(response.order), changed: response.changed, message: response.message };
 }
 
 export async function getMyProjects(): Promise<CustomerProject[]> {
@@ -424,6 +446,7 @@ export async function getProjectMessages(projectId: string): Promise<ProjectMess
 export async function postProjectMessage(projectId: string, body: string, parentId?: string) {
   const message = await apiRequest<RawMessage>(`/me/projects/${projectId}/messages`, {
     method: 'POST',
+    headers: { 'Idempotency-Key': crypto.randomUUID() },
     body: JSON.stringify({ body, parent_id: parentId || null }),
   });
   return {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getPublicSiteData } from '../services/api/repositories';
 import { Project, PublicProcessPost, Review, SiteInfo } from '../types';
+import { LatestRequestGate, useVisiblePolling } from './useVisiblePolling';
 
 interface PublicSiteData {
   site: SiteInfo;
@@ -33,30 +34,50 @@ export function usePublicSiteData() {
   const [data, setData] = useState<PublicSiteData>(EMPTY_DATA);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
-  const requestVersion = useRef(0);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const requestGate = useRef(new LatestRequestGate());
 
-  const reload = useCallback(async () => {
-    const version = ++requestVersion.current;
-    setStatus('loading');
-    setError(null);
+  const fetchData = useCallback(async (background = false) => {
+    const isLatest = requestGate.current.issue();
+    if (!background) {
+      setStatus('loading');
+      setError(null);
+    }
     try {
       const next = await getPublicSiteData();
-      if (requestVersion.current !== version) return;
+      if (!isLatest()) return;
       setData(next);
       setStatus('ready');
+      setRefreshError(null);
     } catch (reason) {
-      if (requestVersion.current !== version) return;
-      setError(reason instanceof Error ? reason.message : '公开内容加载失败。');
-      setStatus('error');
+      if (!isLatest()) return;
+      const message = reason instanceof Error ? reason.message : '公开内容加载失败。';
+      if (background) {
+        setRefreshError(message);
+      } else {
+        setError(message);
+        setStatus('error');
+      }
+      throw reason;
     }
   }, []);
 
+  const reload = useCallback(async () => {
+    try {
+      await fetchData(false);
+    } catch {
+      // The hook exposes the user-facing error state.
+    }
+  }, [fetchData]);
+  useVisiblePolling(() => fetchData(true), 60_000, status === 'ready');
+
   useEffect(() => {
+    const gate = requestGate.current;
     void reload();
     return () => {
-      requestVersion.current += 1;
+      gate.invalidate();
     };
   }, [reload]);
 
-  return { ...data, status, error, reload };
+  return { ...data, status, error, refreshError, reload };
 }

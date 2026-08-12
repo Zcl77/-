@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useRef, useState } from 'react';
 import { FileImage, MessageSquareText, Send, Star } from 'lucide-react';
 import { REVIEW_LIMITS, validateImageFile, validateReviewInput } from '../domain/validation';
 import { InquiryInput, Project, Review, ReviewInput, SiteInfo } from '../types';
@@ -10,7 +10,6 @@ interface CommissionFormProps {
   projects: Project[];
   reviews: Review[];
   site: SiteInfo;
-  onRefresh: () => Promise<void>;
 }
 
 const EMPTY_INQUIRY: Omit<InquiryInput, 'attachments'> = {
@@ -31,7 +30,6 @@ export default function CommissionForm({
   projects,
   reviews,
   site,
-  onRefresh,
 }: CommissionFormProps) {
   const [inquiry, setInquiry] = useState(EMPTY_INQUIRY);
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -43,6 +41,8 @@ export default function CommissionForm({
   const [comment, setComment] = useState('');
   const [reviewState, setReviewState] = useState<'idle' | 'working' | 'success' | 'error'>('idle');
   const [reviewMessage, setReviewMessage] = useState('');
+  const reviewSubmitting = useRef(false);
+  const inquirySubmitting = useRef(false);
 
   const setInquiryField = <K extends keyof typeof EMPTY_INQUIRY>(
     key: K,
@@ -53,6 +53,7 @@ export default function CommissionForm({
 
   const submitInquiryForm = async (event: FormEvent) => {
     event.preventDefault();
+    if (inquirySubmitting.current) return;
     const invalidAttachment = attachments.map(validateImageFile).find(Boolean);
     if (invalidAttachment) {
       setInquiryState('error');
@@ -61,14 +62,18 @@ export default function CommissionForm({
     }
     setInquiryState('working');
     setInquiryMessage('');
+    inquirySubmitting.current = true;
     try {
-      await onSubmitInquiry({ ...inquiry, attachments });
+      const message = await onSubmitInquiry({ ...inquiry, attachments });
       setInquiry(EMPTY_INQUIRY);
       setAttachments([]);
       setInquiryState('success');
+      setInquiryMessage(message);
     } catch (reason) {
       setInquiryMessage(reason instanceof Error ? reason.message : '询价提交失败，请稍后重试。');
       setInquiryState('error');
+    } finally {
+      inquirySubmitting.current = false;
     }
   };
 
@@ -95,6 +100,7 @@ export default function CommissionForm({
 
   const submitReviewForm = async (event: FormEvent) => {
     event.preventDefault();
+    if (reviewSubmitting.current) return;
     const selectedProject = projects.find((project) => project.slug === reviewTarget);
     const input = {
       reviewerName: reviewerName.trim(),
@@ -111,17 +117,20 @@ export default function CommissionForm({
     }
     setReviewState('working');
     setReviewMessage('');
+    reviewSubmitting.current = true;
     try {
-      await onAddReview(input);
+      const message = await onAddReview(input);
       setReviewerName('');
       setRating(5);
       setReviewTarget('studio');
       setComment('');
       setReviewState('success');
-      await onRefresh();
+      setReviewMessage(message);
     } catch (reason) {
       setReviewMessage(reason instanceof Error ? reason.message : '评价提交失败，请稍后重试。');
       setReviewState('error');
+    } finally {
+      reviewSubmitting.current = false;
     }
   };
 
@@ -129,6 +138,12 @@ export default function CommissionForm({
     reviews.length > 0
       ? (reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length).toFixed(1)
       : '—';
+  const contacts = [
+    ['联系人', site.contactName],
+    ['微信', site.wechat],
+    ['电话', site.phone],
+    ['邮箱', site.email],
+  ].filter((item): item is [string, string] => Boolean(item[1]));
 
   return (
     <div className="page-shell">
@@ -169,12 +184,13 @@ export default function CommissionForm({
               <p className="mt-3 max-w-xl text-sm leading-7 text-studio-muted">
                 {site.description || '可通过下方询价表说明模型类型、比例、预算和期望交付时间。'}
               </p>
-              <dl className="mt-5 grid grid-cols-1 gap-px overflow-hidden rounded-[6px] border border-studio-line bg-studio-line sm:grid-cols-2">
-                <Contact label="联系人" value={site.contactName} />
-                <Contact label="微信" value={site.wechat} />
-                <Contact label="电话" value={site.phone} />
-                <Contact label="邮箱" value={site.email} />
-              </dl>
+              {contacts.length > 0 && (
+                <dl className="mt-5 grid grid-cols-1 gap-px overflow-hidden rounded-[6px] border border-studio-line bg-studio-line sm:grid-cols-2">
+                  {contacts.map(([label, value]) => (
+                    <Contact key={label} label={label} value={value} />
+                  ))}
+                </dl>
+              )}
             </section>
 
             <section className="mt-8 ui-panel p-5 md:p-6" aria-labelledby="inquiry-title">
@@ -196,7 +212,9 @@ export default function CommissionForm({
                   tone="success"
                   compact
                   title="询价已提交"
-                  description="工作室会按您留下的方式联系；第一版不会自动发送短信或微信消息。"
+                  description={
+                    inquiryMessage || '工作室会按您留下的方式联系；第一版不会自动发送短信或微信消息。'
+                  }
                   className="mt-5"
                 />
               )}
@@ -357,7 +375,7 @@ export default function CommissionForm({
                   tone="success"
                   compact
                   title="评价已提交"
-                  description="审核通过后才会出现在公开列表。"
+                  description={reviewMessage || '审核通过后才会出现在公开列表。'}
                   className="mt-5"
                 />
               )}
@@ -501,7 +519,7 @@ function Contact({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 bg-studio-surface p-4">
       <dt className="text-[10px] uppercase text-studio-faint">{label}</dt>
-      <dd className="mt-1 break-words text-sm text-studio-ink">{value || '暂未配置'}</dd>
+      <dd className="mt-1 break-words text-sm text-studio-ink">{value}</dd>
     </div>
   );
 }

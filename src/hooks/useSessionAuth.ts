@@ -27,6 +27,13 @@ export function useSessionAuth() {
 
   useEffect(() => {
     void refresh();
+    const expire = () => {
+      setUser({ authenticated: false });
+      setStatus('ready');
+      setError('登录状态已过期，请重新登录。');
+    };
+    window.addEventListener('zhixing:session-expired', expire);
+    return () => window.removeEventListener('zhixing:session-expired', expire);
   }, [refresh]);
 
   const login = useCallback(async (username: string, password: string) => {

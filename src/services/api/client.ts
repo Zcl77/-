@@ -32,6 +32,15 @@ function endpointUrl(path: string): string {
   return `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
+function fallbackErrorMessage(status: number): string {
+  if (status === 401) return '登录状态已过期，请重新登录。';
+  if (status === 403) return '当前账号没有执行此操作的权限，或安全校验已过期。';
+  if (status === 404) return '请求的内容不存在，或当前账号无权查看。';
+  if (status === 429) return '操作过于频繁，请稍后再试。';
+  if (status >= 500) return '网站服务暂时不可用，请稍后重试。';
+  return `请求失败（${status}）。`;
+}
+
 function readCookie(name: string): string | null {
   const prefix = `${encodeURIComponent(name)}=`;
   const match = document.cookie.split('; ').find((item) => item.startsWith(prefix));
@@ -64,8 +73,8 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   let response: Response;
   try {
     response = await fetch(endpointUrl(path), { ...init, method, headers, credentials: 'include' });
-  } catch (error) {
-    throw new ApiError(error instanceof Error ? error.message : '无法连接网站服务。', 0);
+  } catch {
+    throw new ApiError('无法连接网站服务，请检查网络后重试。', 0);
   }
 
   if (response.status === 204) return undefined as T;
@@ -74,8 +83,11 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     ? ((await response.json()) as T & ErrorEnvelope)
     : null;
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('zhixing:session-expired'));
+    }
     throw new ApiError(
-      payload?.error?.message || `请求失败（${response.status}）。`,
+      payload?.error?.message || fallbackErrorMessage(response.status),
       response.status,
       payload?.error?.fields || null,
     );

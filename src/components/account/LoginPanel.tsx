@@ -5,9 +5,10 @@ import StatusNotice from '../ui/StatusNotice';
 interface LoginPanelProps {
   onLogin: (username: string, password: string) => Promise<{ next: string }>;
   onCustomerLogin: () => void;
+  notice?: string | null;
 }
 
-export default function LoginPanel({ onLogin, onCustomerLogin }: LoginPanelProps) {
+export default function LoginPanel({ onLogin, onCustomerLogin, notice }: LoginPanelProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -52,8 +53,14 @@ export default function LoginPanel({ onLogin, onCustomerLogin }: LoginPanelProps
             <p>账号由工作室创建并线下交付。本站不使用 Google 登录，也不会在浏览器长期保存登录令牌。</p>
           </div>
 
-          {error && (
-            <StatusNotice tone="error" compact title="登录未完成" description={error} className="mt-6" />
+          {(error || notice) && (
+            <StatusNotice
+              tone="error"
+              compact
+              title="登录未完成"
+              description={error || notice || undefined}
+              className="mt-6"
+            />
           )}
 
           <form onSubmit={submit} className="mt-7 space-y-5">
@@ -66,11 +73,12 @@ export default function LoginPanel({ onLogin, onCustomerLogin }: LoginPanelProps
                 name="username"
                 autoComplete="username"
                 required
-                maxLength={150}
+                maxLength={18}
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
                 className="field-input"
               />
+              <p className="mt-2 text-[11px] text-studio-faint">用户名最多 18 个字符。</p>
             </div>
             <div>
               <label htmlFor="login-password" className="field-label">

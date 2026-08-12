@@ -129,6 +129,9 @@ export interface CustomerOrder {
   orderType: string;
   confirmationStatus: 'inquiry' | 'proposed' | 'confirmed' | 'cancelled';
   agreedAmount: string | null;
+  quotedAt: string | null;
+  quoteDecision: 'none' | 'pending' | 'accepted' | 'rejected';
+  quoteDecisionAt: string | null;
   depositStatus: 'not_recorded' | 'pending' | 'recorded' | 'waived';
   finalPaymentStatus: 'not_recorded' | 'pending' | 'recorded' | 'waived';
   deliveryStatus: 'not_ready' | 'ready' | 'delivered';

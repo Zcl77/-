@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Check, MessageSquareText, RefreshCw, Send } from 'lucide-react';
 import {
   acknowledgeUpdate,
@@ -9,6 +9,7 @@ import {
   postProjectMessage,
 } from '../../services/api/repositories';
 import { CustomerProject, ProductionStage, ProgressUpdateItem, ProjectMessageItem } from '../../types';
+import { LatestRequestGate, useVisiblePolling } from '../../hooks/useVisiblePolling';
 import MediaLightbox from '../ui/MediaLightbox';
 import SmartImage from '../ui/SmartImage';
 import StatusNotice from '../ui/StatusNotice';
@@ -45,47 +46,60 @@ export default function CustomerProjectDetail({ projectId, onBack }: CustomerPro
   const [messageBody, setMessageBody] = useState('');
   const [sending, setSending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [acknowledging, setAcknowledging] = useState<Set<string>>(() => new Set());
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number; alt: string } | null>(null);
+  const requestGate = useRef(new LatestRequestGate());
+  const messageSubmitting = useRef(false);
+  const acknowledgementSubmitting = useRef(new Set<string>());
 
-  const load = useCallback(async () => {
-    setStatus('loading');
-    setError(null);
-    try {
-      const [nextProject, nextStages, nextUpdates, nextMessages] = await Promise.all([
-        getMyProject(projectId),
-        getProjectStages(projectId),
-        getProjectUpdates(projectId),
-        getProjectMessages(projectId),
-      ]);
-      setProject(nextProject);
-      setStages(nextStages);
-      setUpdates(nextUpdates);
-      setMessages(nextMessages);
-      setStatus('ready');
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '项目内容加载失败。');
-      setStatus('error');
-    }
-  }, [projectId]);
+  const load = useCallback(
+    async (background = false) => {
+      const isLatest = requestGate.current.issue();
+      if (!background) {
+        setStatus('loading');
+        setError(null);
+      }
+      try {
+        const [nextProject, nextStages, nextUpdates, nextMessages] = await Promise.all([
+          getMyProject(projectId),
+          getProjectStages(projectId),
+          getProjectUpdates(projectId),
+          getProjectMessages(projectId),
+        ]);
+        if (!isLatest()) return;
+        setProject(nextProject);
+        setStages(nextStages);
+        setUpdates(nextUpdates);
+        setMessages(nextMessages);
+        setStatus('ready');
+        setSyncError(null);
+      } catch (reason) {
+        if (!isLatest()) return;
+        const message = reason instanceof Error ? reason.message : '项目内容加载失败。';
+        if (background) setSyncError(message);
+        else {
+          setError(message);
+          setStatus('error');
+        }
+        throw reason;
+      }
+    },
+    [projectId],
+  );
 
   useEffect(() => {
-    void load();
+    const gate = requestGate.current;
+    void load().catch(() => undefined);
+    return () => gate.invalidate();
   }, [load]);
-
-  useEffect(() => {
-    if (status !== 'ready') return undefined;
-    const timer = window.setInterval(() => {
-      void getProjectMessages(projectId)
-        .then(setMessages)
-        .catch(() => undefined);
-    }, 30_000);
-    return () => window.clearInterval(timer);
-  }, [projectId, status]);
+  useVisiblePolling(() => load(true), 20_000, status === 'ready');
 
   const sendMessage = async (event: FormEvent) => {
     event.preventDefault();
     const body = messageBody.trim();
-    if (!body) return;
+    if (!body || messageSubmitting.current) return;
+    messageSubmitting.current = true;
     setSending(true);
     setActionError(null);
     try {
@@ -95,11 +109,15 @@ export default function CustomerProjectDetail({ projectId, onBack }: CustomerPro
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : '留言发送失败。');
     } finally {
+      messageSubmitting.current = false;
       setSending(false);
     }
   };
 
   const acknowledge = async (updateId: string) => {
+    if (acknowledgementSubmitting.current.has(updateId)) return;
+    acknowledgementSubmitting.current.add(updateId);
+    setAcknowledging((current) => new Set(current).add(updateId));
     setActionError(null);
     try {
       const receipt = await acknowledgeUpdate(projectId, updateId);
@@ -108,6 +126,13 @@ export default function CustomerProjectDetail({ projectId, onBack }: CustomerPro
       );
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : '确认失败，请稍后重试。');
+    } finally {
+      acknowledgementSubmitting.current.delete(updateId);
+      setAcknowledging((current) => {
+        const next = new Set(current);
+        next.delete(updateId);
+        return next;
+      });
     }
   };
 
@@ -127,7 +152,11 @@ export default function CustomerProjectDetail({ projectId, onBack }: CustomerPro
         title="项目无法打开"
         description={error || '项目不存在或当前账号没有访问权限。'}
         action={
-          <button type="button" onClick={() => void load()} className="button-secondary">
+          <button
+            type="button"
+            onClick={() => void load().catch(() => undefined)}
+            className="button-secondary"
+          >
             <RefreshCw className="h-4 w-4" />
             重试
           </button>
@@ -138,6 +167,25 @@ export default function CustomerProjectDetail({ projectId, onBack }: CustomerPro
 
   return (
     <>
+      {syncError && (
+        <StatusNotice
+          tone="error"
+          compact
+          title="自动同步暂时中断"
+          description={`${syncError} 页面会自动退避重试。`}
+          action={
+            <button
+              type="button"
+              onClick={() => void load(true).catch(() => undefined)}
+              className="button-secondary"
+            >
+              <RefreshCw className="h-4 w-4" />
+              立即重试
+            </button>
+          }
+          className="mb-6"
+        />
+      )}
       <button type="button" onClick={onBack} className="button-quiet mb-6">
         <ArrowLeft className="h-4 w-4" />
         返回我的项目
@@ -291,10 +339,11 @@ export default function CustomerProjectDetail({ projectId, onBack }: CustomerPro
                           <button
                             type="button"
                             onClick={() => void acknowledge(update.id)}
+                            disabled={acknowledging.has(update.id)}
                             className="button-secondary"
                           >
                             <Check className="h-4 w-4" />
-                            确认已了解
+                            {acknowledging.has(update.id) ? '正在确认' : '确认已了解'}
                           </button>
                         ))}
                     </div>
@@ -327,7 +376,7 @@ export default function CustomerProjectDetail({ projectId, onBack }: CustomerPro
                 <MessageSquareText className="h-4 w-4 text-studio-brass" />
                 项目留言
               </h2>
-              <span className="text-[10px] text-studio-faint">30 秒低频刷新</span>
+              <span className="text-[10px] text-studio-faint">页面可见时自动同步</span>
             </div>
             {actionError && (
               <StatusNotice

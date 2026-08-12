@@ -96,7 +96,6 @@ export default function App() {
         site={publicData.site}
         onAddReview={submitReview}
         onSubmitInquiry={submitInquiry}
-        onRefresh={publicData.reload}
       />
     );
   };
@@ -125,7 +124,13 @@ export default function App() {
         </PageStatus>
       );
     if (!auth.user.authenticated)
-      return <LoginPanel onLogin={auth.login} onCustomerLogin={() => navigate('/my-projects', true)} />;
+      return (
+        <LoginPanel
+          onLogin={auth.login}
+          onCustomerLogin={() => navigate('/my-projects', true)}
+          notice={auth.error}
+        />
+      );
     return (
       <CustomerPortal
         user={auth.user}
@@ -146,6 +151,22 @@ export default function App() {
       <div className="min-h-dvh bg-studio-canvas font-sans text-studio-ink">
         <Sidebar activeTab={route.tab} onNavigate={navigateTab} accountLabel={accountLabel} />
         <div className="min-h-dvh pb-[4.5rem] pt-14 lg:pb-0 lg:pl-28 lg:pt-0">
+          {route.tab !== 'account' && publicData.refreshError && (
+            <div className="mx-auto max-w-7xl px-5 pt-4 md:px-8">
+              <StatusNotice
+                tone="error"
+                compact
+                title="自动同步暂时中断"
+                description={`${publicData.refreshError} 页面会自动退避重试。`}
+                action={
+                  <button type="button" onClick={() => void publicData.reload()} className="button-secondary">
+                    <RefreshCw className="h-4 w-4" />
+                    立即重试
+                  </button>
+                }
+              />
+            </div>
+          )}
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={`${route.tab}-${route.workSlug || route.projectId || ''}`}

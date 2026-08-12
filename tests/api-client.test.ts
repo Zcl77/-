@@ -105,7 +105,23 @@ describe('REST API client', () => {
     await expect(apiRequest('/site')).rejects.toMatchObject({
       name: 'ApiError',
       status: 0,
-      message: 'offline',
+      message: '无法连接网站服务，请检查网络后重试。',
     });
+  });
+
+  it.each([
+    [401, '登录状态已过期，请重新登录。'],
+    [403, '当前账号没有执行此操作的权限，或安全校验已过期。'],
+  ] as const)('distinguishes %s authentication errors', async (status, message) => {
+    vi.stubGlobal('window', { dispatchEvent: vi.fn() });
+    vi.stubGlobal(
+      'CustomEvent',
+      class CustomEventMock {
+        constructor(readonly type: string) {}
+      },
+    );
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status })));
+
+    await expect(apiRequest('/me/projects')).rejects.toMatchObject({ status, message });
   });
 });
