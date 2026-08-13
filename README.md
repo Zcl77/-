@@ -1,3 +1,73 @@
+## 当前状态
+
+PR #4 已通过普通 merge commit 合并到 `main`。当前版本为可在本地运行和验收的 Django + MySQL MVP，尚未部署到正式服务器。
+
+当前支持公开作品、制作日志、询价、离线订单、报价接受或拒绝、客户私人项目、进度图片、留言、确认回执、评价提交与审核，以及 Django Admin 管理后台。
+
+当前暂不包含在线支付、短信验证码、微信登录、摄像头直播和正式服务器部署。
+
+## 日常启动与停止
+
+启动前需要安装并运行 Docker Desktop。必须进入同时包含 `compose.yaml` 和本机 `.env` 的项目目录。
+
+```powershell
+docker compose up -d
+docker compose ps
+```
+
+正常运行后访问：
+
+- 前台：<http://127.0.0.1:3000/>
+- 管理后台：<http://127.0.0.1:8000/admin/>
+- MySQL 本机端口：`127.0.0.1:3307`
+
+停止容器：
+
+```powershell
+docker compose stop
+```
+
+重新启动：
+
+```powershell
+docker compose start
+```
+
+> [!CAUTION]
+> 禁止执行 `docker compose down -v`。参数 `-v` 会删除 MySQL、媒体文件等持久化卷，可能造成客户、订单、作品和图片永久丢失。
+
+## 换电脑运行
+
+GitHub 只保存代码，不保存 `.env`、MySQL 业务数据、管理员账号和媒体文件。只克隆仓库只能得到程序，不能得到原电脑中的完整数据。
+
+完整迁移需要：
+
+1. 从 GitHub 克隆 `main`。
+2. 根据 `.env.example` 创建新电脑本机使用的 `.env`。
+3. 安装并启动 Docker Desktop。
+4. 恢复同一时间点的 MySQL 数据库备份。
+5. 恢复与数据库匹配的媒体文件备份。
+6. 启动 Docker Compose。
+7. 执行迁移和系统检查。
+8. 验证前台、后台、登录、权限和图片。
+
+`.env`、密码、密钥和备份不得提交到 GitHub，也不要通过聊天发送。
+
+## Firebase 迁移说明
+
+Firebase 仅属于历史原型。当前运行版本不再使用 Firebase Authentication、Firestore、Firebase Storage、Google 登录或 Firebase Custom Claims。当前架构为 React、Django、MySQL 和 Docker Volume。
+
+## 摄像头监控状态
+
+摄像头实时查看尚未接入。规划链路为：
+
+```text
+海康威视摄像头 -> RTSP -> MediaMTX -> HLS/WebRTC
+                  -> Django 权限控制 -> React 前端
+```
+
+禁止把 RTSP 地址、摄像头账号或密码写入前端、提交到 GitHub，或将摄像头管理端口直接暴露到公网。
+
 # 知行造境 / Zhixing Studio
 
 “知行造境”的正式业务网站与客户项目中心。公开网站用于展示作品、公开制作日志并接收询价；登录后的客户中心用于查看被明确授权的订单、制作阶段、真实进度、私人图片、确认记录和项目留言。
