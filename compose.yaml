@@ -40,6 +40,8 @@ services:
       MYSQL_PORT: 3306
       DJANGO_MEDIA_ROOT: /data/media
       DJANGO_STATIC_ROOT: /data/static
+      DJANGO_ENVIRONMENT: ${DJANGO_ENVIRONMENT:-production}
+      DJANGO_ENABLE_MOCK_PAYMENTS: ${DJANGO_ENABLE_MOCK_PAYMENTS:-false}
     command: ['python', 'manage.py', 'runserver', '0.0.0.0:8000']
     ports:
       - '127.0.0.1:${BACKEND_HOST_PORT:-8000}:8000'

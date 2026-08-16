@@ -8,7 +8,15 @@ from accounts.models import CustomerProfile, User
 from common.tests.utils import TEST_PASSWORD, csrf_token, image_upload
 from media_library.models import MediaAsset
 
-from projects.models import ClientProject, Order, ProgressImage, ProgressUpdate, ProjectMessage
+from projects.models import (
+    ClientProject,
+    Order,
+    PaymentRecord,
+    ProgressImage,
+    ProgressUpdate,
+    ProjectMembership,
+    ProjectMessage,
+)
 
 
 class CustomerObjectPermissionTests(TransactionTestCase):
@@ -126,6 +134,24 @@ class CustomerObjectPermissionTests(TransactionTestCase):
         )
         self.assertFalse(ProjectMessage.objects.filter(body="不应写入").exists())
 
+    def test_project_viewer_does_not_receive_another_customers_order_or_payments(self):
+        ProjectMembership.objects.create(
+            project=self.project_b,
+            user=self.customer_a,
+            role=ProjectMembership.Role.VIEWER,
+        )
+        PaymentRecord.objects.create(
+            order=self.order_b,
+            payment_type=PaymentRecord.PaymentType.DEPOSIT,
+            amount="100.00",
+            status=PaymentRecord.Status.SUCCEEDED,
+            mock_transaction_id="MOCK-PRIVATE-B",
+        )
+
+        response = self.logged_in_client(self.customer_a).get(f"/api/v1/me/projects/{self.project_b.pk}")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()["order"])
+
     def test_customer_cannot_fetch_another_customers_private_media(self):
         client = self.logged_in_client(self.customer_a)
         response = client.get(f"/api/v1/me/media/{self.private_asset_b.pk}")
@@ -220,9 +246,11 @@ class CustomerObjectPermissionTests(TransactionTestCase):
         )
 
         quote_url = f"/api/v1/me/orders/{quote.pk}/quote-decision"
+        payment_url = f"/api/v1/me/orders/{quote.pk}/mock-payment"
         message_url = f"/api/v1/me/projects/{self.project_b.pk}/messages"
         acknowledge_url = f"/api/v1/me/projects/{self.project_b.pk}/updates/{self.update_b.pk}/acknowledge"
         self.assertEqual(client.post(quote_url, {"decision": "accepted"}, format="json").status_code, 403)
+        self.assertEqual(client.post(payment_url, {"payment_type": "final"}, format="json").status_code, 403)
         self.assertEqual(client.post(message_url, {"body": "缺少 CSRF"}, format="json").status_code, 403)
         self.assertEqual(client.post(acknowledge_url, format="json").status_code, 403)
 
@@ -234,6 +262,14 @@ class CustomerObjectPermissionTests(TransactionTestCase):
 
     def test_anonymous_and_temporary_password_sessions_are_blocked(self):
         self.assertIn(APIClient().get("/api/v1/me/projects").status_code, {401, 403})
+        self.assertIn(
+            APIClient().post(
+                f"/api/v1/me/orders/{self.order_a.pk}/mock-payment",
+                {"payment_type": "final"},
+                format="json",
+            ).status_code,
+            {401, 403},
+        )
         self.customer_a.must_change_password = True
         self.customer_a.save(update_fields=["must_change_password", "updated_at"])
         response = self.logged_in_client(self.customer_a).get("/api/v1/me/projects")

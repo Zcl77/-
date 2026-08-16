@@ -1,4 +1,5 @@
 import hashlib
+from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -13,6 +14,9 @@ from media_library.models import MediaAsset
 
 
 class Order(UUIDTimeStampedModel):
+    class Currency(models.TextChoices):
+        CNY = "CNY", "人民币"
+
     class ConfirmationStatus(models.TextChoices):
         INQUIRY = "inquiry", "询价中"
         PROPOSED = "proposed", "已报价"
@@ -36,6 +40,15 @@ class Order(UUIDTimeStampedModel):
         ACCEPTED = "accepted", "客户已接受"
         REJECTED = "rejected", "客户已拒绝"
 
+    class PaymentStatus(models.TextChoices):
+        UNPAID = "unpaid", "未付款"
+        DEPOSIT_PENDING = "deposit_pending", "定金待支付"
+        DEPOSIT_PAID = "deposit_paid", "定金已支付"
+        FINAL_PENDING = "final_pending", "尾款待支付"
+        PAID = "paid", "已付清"
+        CANCELLED = "cancelled", "已取消"
+        REFUNDED = "refunded", "已退款"
+
     order_number = models.CharField("订单编号", max_length=64, unique=True)
     customer = models.ForeignKey(CustomerProfile, verbose_name="客户", on_delete=models.PROTECT, related_name="orders")
     order_type = models.CharField("订单类型", max_length=80)
@@ -45,8 +58,12 @@ class Order(UUIDTimeStampedModel):
         choices=ConfirmationStatus.choices,
         default=ConfirmationStatus.INQUIRY,
     )
-    agreed_amount = models.DecimalField("报价金额", max_digits=12, decimal_places=2, null=True, blank=True)
+    agreed_amount = models.DecimalField("订单金额（报价）", max_digits=12, decimal_places=2, null=True, blank=True)
+    currency = models.CharField("币种", max_length=3, choices=Currency.choices, default=Currency.CNY)
+    deposit_amount = models.DecimalField("定金金额", max_digits=12, decimal_places=2, default=0)
+    final_amount = models.DecimalField("尾款金额", max_digits=12, decimal_places=2, default=0)
     quoted_at = models.DateTimeField("报价时间", null=True, blank=True)
+    quote_valid_until = models.DateTimeField("报价有效期", null=True, blank=True)
     quote_decision = models.CharField(
         "客户报价决定",
         max_length=16,
@@ -54,6 +71,12 @@ class Order(UUIDTimeStampedModel):
         default=QuoteDecision.NONE,
     )
     quote_decision_at = models.DateTimeField("客户决定时间", null=True, blank=True)
+    payment_status = models.CharField(
+        "付款状态",
+        max_length=24,
+        choices=PaymentStatus.choices,
+        default=PaymentStatus.UNPAID,
+    )
     deposit_status = models.CharField(
         "定金状态",
         max_length=16,
@@ -83,8 +106,47 @@ class Order(UUIDTimeStampedModel):
             models.CheckConstraint(
                 condition=Q(agreed_amount__isnull=True) | Q(agreed_amount__gte=0),
                 name="projects_order_amount_nonnegative",
-            )
+            ),
+            models.CheckConstraint(condition=Q(deposit_amount__gte=0), name="projects_order_deposit_nonnegative"),
+            models.CheckConstraint(condition=Q(final_amount__gte=0), name="projects_order_final_nonnegative"),
+            models.CheckConstraint(condition=Q(currency="CNY"), name="projects_order_currency_supported"),
+            models.CheckConstraint(
+                condition=(
+                    Q(agreed_amount__isnull=True, deposit_amount=0, final_amount=0)
+                    | Q(agreed_amount=models.F("deposit_amount") + models.F("final_amount"))
+                ),
+                name="projects_order_amounts_match_total",
+            ),
         ]
+
+    def _prepare_amounts(self):
+        if self.agreed_amount is None:
+            return set()
+        agreed_amount = Decimal(str(self.agreed_amount))
+        deposit_amount = Decimal(str(self.deposit_amount))
+        final_amount = Decimal(str(self.final_amount))
+        self.agreed_amount = agreed_amount
+        self.deposit_amount = deposit_amount
+        self.final_amount = final_amount
+        if final_amount == 0 and deposit_amount <= agreed_amount:
+            self.final_amount = agreed_amount - deposit_amount
+            return {"final_amount"}
+        if not self.pk or self._state.adding:
+            return set()
+        previous = type(self).objects.filter(pk=self.pk).values(
+            "agreed_amount", "deposit_amount", "final_amount"
+        ).first()
+        if (
+            previous
+            and previous["agreed_amount"] != self.agreed_amount
+            and previous["deposit_amount"] == self.deposit_amount
+            and previous["final_amount"] == self.final_amount
+            and previous["agreed_amount"] is not None
+            and previous["deposit_amount"] + previous["final_amount"] == previous["agreed_amount"]
+        ):
+            self.final_amount = self.agreed_amount - self.deposit_amount
+            return {"final_amount"}
+        return set()
 
     def _prepare_quote_state(self):
         if self.confirmation_status != self.ConfirmationStatus.PROPOSED:
@@ -104,6 +166,11 @@ class Order(UUIDTimeStampedModel):
         return {"quoted_at", "quote_decision", "quote_decision_at"}
 
     def clean(self):
+        self._prepare_amounts()
+        if self.agreed_amount is None and (self.deposit_amount or self.final_amount):
+            raise ValidationError({"agreed_amount": "填写定金或尾款前必须先填写订单金额。"})
+        if self.agreed_amount is not None and self.deposit_amount + self.final_amount != self.agreed_amount:
+            raise ValidationError({"final_amount": "定金金额与尾款金额之和必须等于订单金额。"})
         if self.confirmation_status in {
             self.ConfirmationStatus.PROPOSED,
             self.ConfirmationStatus.CONFIRMED,
@@ -112,13 +179,76 @@ class Order(UUIDTimeStampedModel):
         self._prepare_quote_state()
 
     def save(self, *args, **kwargs):
-        derived_fields = self._prepare_quote_state()
+        derived_fields = self._prepare_amounts() | self._prepare_quote_state()
         if kwargs.get("update_fields") is not None:
             kwargs["update_fields"] = set(kwargs["update_fields"]) | derived_fields
         super().save(*args, **kwargs)
 
     def __str__(self):
         return self.order_number
+
+    def is_mock_payment_eligible_for(self, user):
+        return (
+            self.is_dev_data
+            and self.customer.is_dev_data
+            and self.customer.user_id == user.pk
+            and user.is_dev_data
+        )
+
+
+class PaymentRecord(UUIDTimeStampedModel):
+    class PaymentType(models.TextChoices):
+        DEPOSIT = "deposit", "定金"
+        FINAL = "final", "尾款"
+        REFUND = "refund", "退款"
+
+    class Channel(models.TextChoices):
+        MOCK = "mock", "本地模拟"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "待支付"
+        SUCCEEDED = "succeeded", "成功"
+        FAILED = "failed", "失败"
+        REFUNDED = "refunded", "已退款"
+
+    order = models.ForeignKey(Order, verbose_name="订单", on_delete=models.PROTECT, related_name="payment_records")
+    payment_type = models.CharField("付款类型", max_length=16, choices=PaymentType.choices)
+    channel = models.CharField("支付渠道", max_length=16, choices=Channel.choices, default=Channel.MOCK)
+    amount = models.DecimalField("金额", max_digits=12, decimal_places=2)
+    currency = models.CharField("币种", max_length=3, choices=Order.Currency.choices, default=Order.Currency.CNY)
+    status = models.CharField("状态", max_length=16, choices=Status.choices, default=Status.PENDING)
+    mock_transaction_id = models.CharField("模拟交易号", max_length=64, null=True, blank=True, unique=True)
+    idempotency_key = models.CharField("幂等标识", max_length=160, null=True, blank=True, unique=True, editable=False)
+    paid_at = models.DateTimeField("支付时间", null=True, blank=True)
+    notes = models.CharField("备注", max_length=1000, blank=True)
+    metadata = models.JSONField("元数据", default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "付款记录"
+        verbose_name_plural = "付款记录"
+        constraints = [
+            models.CheckConstraint(condition=Q(amount__gt=0), name="projects_payment_amount_positive"),
+            models.CheckConstraint(condition=Q(currency=Order.Currency.CNY), name="projects_payment_currency_supported"),
+        ]
+
+    def clean(self):
+        if self.amount is None or self.amount <= 0:
+            raise ValidationError({"amount": "付款记录金额必须大于 0。"})
+        if self.channel != self.Channel.MOCK:
+            raise ValidationError({"channel": "当前阶段只允许本地模拟支付。"})
+        if self.order_id and self.currency != self.order.currency:
+            raise ValidationError({"currency": "付款记录币种必须与订单币种一致。"})
+
+    def save(self, *args, **kwargs):
+        if self.status == self.Status.SUCCEEDED and self.paid_at is None:
+            self.paid_at = timezone.now()
+            if kwargs.get("update_fields") is not None:
+                kwargs["update_fields"] = set(kwargs["update_fields"]) | {"paid_at"}
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.order} / {self.get_payment_type_display()} / {self.amount} {self.order.currency}"
 
 
 class ClientProject(UUIDTimeStampedModel):

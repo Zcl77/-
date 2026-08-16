@@ -3,18 +3,26 @@ export const API_BASE_URL = (configuredBase || '/api/v1').replace(/\/$/, '');
 
 export class ApiError extends Error {
   readonly status: number;
+  readonly code: string | null;
   readonly fields: Record<string, unknown> | null;
 
-  constructor(message: string, status: number, fields: Record<string, unknown> | null = null) {
+  constructor(
+    message: string,
+    status: number,
+    fields: Record<string, unknown> | null = null,
+    code: string | null = null,
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.code = code;
     this.fields = fields;
   }
 }
 
 interface ErrorEnvelope {
   error?: {
+    code?: string;
     message?: string;
     fields?: Record<string, unknown> | null;
   };
@@ -90,6 +98,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
       payload?.error?.message || fallbackErrorMessage(response.status),
       response.status,
       payload?.error?.fields || null,
+      payload?.error?.code || null,
     );
   }
   return payload as T;
