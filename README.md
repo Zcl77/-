@@ -221,6 +221,8 @@ GitHub Actions 会在每个 PR 上分别运行前端检查和临时 MySQL 8.4 �
 
 第一条命令协调备份本项目 MySQL 与媒体 Volume；第二条命令在临时数据库和临时目录中验证恢复，不覆盖活动数据。详见 [备份与恢复](docs/BACKUP_AND_RESTORE.md)。
 
+需要把已验证的数据库、媒体、源码和 Docker 镜像一起迁移到另一台电脑时，使用便携打包与隔离恢复流程。`.env` 不会进入包，必须单独加密保存。命令、包结构和拒绝规则详见 [便携打包与隔离恢复](docs/PORTABLE_PACKAGE.md)。
+
 ## 目录
 
 ```text

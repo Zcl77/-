@@ -10,6 +10,16 @@ permissions:
   contents: read
 
 jobs:
+  portable-scripts:
+    name: Portable PowerShell scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse and test portable scripts
+        shell: pwsh
+        run: ./scripts/tests/portable-scripts.tests.ps1
+
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
