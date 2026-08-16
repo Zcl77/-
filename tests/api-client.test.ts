@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, apiGetAll, apiRequest } from '../src/services/api/client';
+import { getMyOrders, mockPayOrder } from '../src/services/api/repositories';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -65,17 +66,25 @@ describe('REST API client', () => {
   it('surfaces structured server errors to the interface', async () => {
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue(
-          jsonResponse({ error: { message: '字段校验失败。', fields: { name: ['此字段不能为空。'] } } }, 400),
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            error: {
+              code: 'invalid',
+              message: '字段校验失败。',
+              fields: { name: ['此字段不能为空。'] },
+            },
+          },
+          400,
         ),
+      ),
     );
 
     const error = await apiRequest('/site').catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({
       status: 400,
+      code: 'invalid',
       message: '字段校验失败。',
       fields: { name: ['此字段不能为空。'] },
     });
@@ -124,4 +133,93 @@ describe('REST API client', () => {
 
     await expect(apiRequest('/me/projects')).rejects.toMatchObject({ status, message });
   });
+
+  it('maps transaction amounts, aggregate status, and mock payment records', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          count: 1,
+          next: null,
+          previous: null,
+          results: [rawTransactionOrder()],
+        }),
+      ),
+    );
+
+    await expect(getMyOrders()).resolves.toMatchObject([
+      {
+        agreedAmount: '1000.00',
+        currency: 'CNY',
+        depositAmount: '300.00',
+        finalAmount: '700.00',
+        paymentStatus: 'final_pending',
+        paymentRecords: [{ paymentType: 'deposit', channel: 'mock', amount: '300.00', currency: 'CNY' }],
+        availableActions: ['mock_pay_final'],
+      },
+    ]);
+  });
+
+  it('posts only an explicitly labelled mock payment type', async () => {
+    vi.stubGlobal('document', { cookie: 'csrftoken=local-test-token' });
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          order: { ...rawTransactionOrder(), payment_status: 'paid' },
+          payment: rawTransactionOrder().payment_records[0],
+          created: true,
+          message: '本地模拟付款已记录；该记录不代表真实收款。',
+        },
+        201,
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(mockPayOrder('order-1', 'final')).resolves.toMatchObject({
+      order: { paymentStatus: 'paid' },
+      created: true,
+      message: expect.stringContaining('不代表真实收款'),
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/me/orders/order-1/mock-payment',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ payment_type: 'final' }) }),
+    );
+  });
 });
+
+function rawTransactionOrder() {
+  return {
+    id: 'order-1',
+    order_number: 'ZX-TEST-001',
+    order_type: '建筑模型',
+    confirmation_status: 'confirmed',
+    agreed_amount: '1000.00',
+    currency: 'CNY',
+    deposit_amount: '300.00',
+    final_amount: '700.00',
+    quoted_at: '2026-08-16T00:00:00Z',
+    quote_valid_until: '2026-08-30T00:00:00Z',
+    quote_decision: 'accepted',
+    quote_decision_at: '2026-08-16T01:00:00Z',
+    payment_status: 'final_pending',
+    deposit_status: 'recorded',
+    final_payment_status: 'pending',
+    delivery_status: 'not_ready',
+    payment_records: [
+      {
+        id: 'payment-1',
+        payment_type: 'deposit',
+        channel: 'mock',
+        amount: '300.00',
+        currency: 'CNY',
+        status: 'succeeded',
+        mock_transaction_id: 'MOCK-LOCALTEST',
+        paid_at: '2026-08-16T02:00:00Z',
+        created_at: '2026-08-16T02:00:00Z',
+      },
+    ],
+    available_actions: ['mock_pay_final'],
+    created_at: '2026-08-16T00:00:00Z',
+    updated_at: '2026-08-16T02:00:00Z',
+  } as const;
+}

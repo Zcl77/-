@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowRight, BriefcaseBusiness, Check, LogOut, RefreshCw, Settings2, X } from 'lucide-react';
-import { decideQuote, getMyOrders, getMyProjects } from '../../services/api/repositories';
+import { decideQuote, getMyOrders, getMyProjects, mockPayOrder } from '../../services/api/repositories';
 import { LatestRequestGate, useVisiblePolling } from '../../hooks/useVisiblePolling';
+import {
+  formatCnyAmount as formatAmount,
+  getOrderUiActions,
+  paymentPartStatus,
+  replaceOrder,
+} from '../../domain/orderPayment';
 import { AuthenticatedUser, CustomerOrder, CustomerProject } from '../../types';
 import StatusNotice from '../ui/StatusNotice';
 import CustomerProjectDetail from './CustomerProjectDetail';
@@ -39,11 +45,21 @@ const QUOTE_DECISION: Record<CustomerOrder['quoteDecision'], string> = {
   rejected: '您已拒绝',
 };
 
-function formatAmount(value: string | null) {
-  if (!value) return '待报价';
-  const [whole, fraction = '00'] = value.split('.');
-  return `¥ ${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${fraction.padEnd(2, '0').slice(0, 2)}`;
-}
+const PAYMENT_STATUS: Record<CustomerOrder['paymentStatus'], string> = {
+  unpaid: '未付款',
+  deposit_pending: '定金待支付',
+  deposit_paid: '定金已支付',
+  final_pending: '尾款待支付',
+  paid: '已付清',
+  cancelled: '已取消',
+  refunded: '已退款',
+};
+
+const PAYMENT_TYPE: Record<CustomerOrder['paymentRecords'][number]['paymentType'], string> = {
+  deposit: '定金',
+  final: '尾款',
+  refund: '退款',
+};
 
 function dateTime(value: string) {
   return new Intl.DateTimeFormat('zh-CN', {
@@ -72,10 +88,17 @@ export default function CustomerPortal({
     decision: 'accepted' | 'rejected';
   } | null>(null);
   const [quoteMessage, setQuoteMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+  const [paymentAction, setPaymentAction] = useState<{ orderId: string; type: 'deposit' | 'final' } | null>(
+    null,
+  );
+  const [paymentMessage, setPaymentMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(
+    null,
+  );
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const requestGate = useRef(new LatestRequestGate());
   const quoteSubmitting = useRef(false);
+  const paymentSubmitting = useRef(false);
 
   const load = useCallback(
     async (background = false) => {
@@ -124,7 +147,7 @@ export default function CustomerPortal({
     setQuoteMessage(null);
     try {
       const result = await decideQuote(orderId, decision);
-      setOrders((current) => current.map((order) => (order.id === orderId ? result.order : order)));
+      setOrders((current) => replaceOrder(current, result.order));
       setQuoteMessage({ tone: 'success', text: result.message });
       await load(true).catch(() => undefined);
     } catch (reason) {
@@ -135,6 +158,27 @@ export default function CustomerPortal({
     } finally {
       quoteSubmitting.current = false;
       setQuoteAction(null);
+    }
+  };
+
+  const submitMockPayment = async (orderId: string, type: 'deposit' | 'final') => {
+    if (paymentSubmitting.current) return;
+    paymentSubmitting.current = true;
+    setPaymentAction({ orderId, type });
+    setPaymentMessage(null);
+    try {
+      const result = await mockPayOrder(orderId, type);
+      setOrders((current) => replaceOrder(current, result.order));
+      setPaymentMessage({ tone: 'success', text: result.message });
+      await load(true).catch(() => undefined);
+    } catch (reason) {
+      setPaymentMessage({
+        tone: 'error',
+        text: reason instanceof Error ? reason.message : '本地模拟付款未能完成。',
+      });
+    } finally {
+      paymentSubmitting.current = false;
+      setPaymentAction(null);
     }
   };
 
@@ -255,7 +299,13 @@ export default function CustomerPortal({
                       报价与订单
                     </h2>
                   </div>
-                  <span className="text-[10px] text-studio-faint">线下支付记录</span>
+                  <span className="text-[10px] text-studio-warning">
+                    {orders.some((order) =>
+                      order.availableActions.some((action) => action.startsWith('mock_pay_')),
+                    )
+                      ? '仅限本地测试 / 模拟支付'
+                      : '付款记录'}
+                  </span>
                 </div>
                 {quoteMessage && (
                   <StatusNotice
@@ -266,11 +316,22 @@ export default function CustomerPortal({
                     className="mt-4"
                   />
                 )}
+                {paymentMessage && (
+                  <StatusNotice
+                    tone={paymentMessage.tone}
+                    compact
+                    title="本地模拟付款"
+                    description={paymentMessage.text}
+                    className="mt-4"
+                  />
+                )}
                 <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
                   {orders.map((order) => {
                     const deciding = quoteAction?.orderId === order.id;
-                    const canDecide =
-                      order.confirmationStatus === 'proposed' && order.quoteDecision === 'pending';
+                    const { canDecide, mockPaymentType } = getOrderUiActions(order);
+                    const canPayDeposit = mockPaymentType === 'deposit';
+                    const canPayFinal = mockPaymentType === 'final';
+                    const paying = paymentAction?.orderId === order.id;
                     return (
                       <article
                         key={order.id}
@@ -284,32 +345,21 @@ export default function CustomerPortal({
                             </h3>
                             <p className="mt-1 text-xs text-studio-faint">订单 {order.orderNumber}</p>
                           </div>
-                          <strong className="font-serif text-xl text-studio-ink">
-                            {formatAmount(order.agreedAmount)}
-                          </strong>
+                          <div className="text-right">
+                            <span className="block text-[10px] text-studio-faint">订单总额</span>
+                            <strong className="mt-1 block font-serif text-xl text-studio-ink">
+                              {formatAmount(order.agreedAmount)}
+                            </strong>
+                          </div>
                         </div>
                         <dl className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-[4px] bg-studio-line text-xs">
                           <OrderState label="报价决定" value={QUOTE_DECISION[order.quoteDecision]} />
-                          <OrderState
-                            label="定金"
-                            value={
-                              order.depositStatus === 'recorded'
-                                ? '已记录'
-                                : order.depositStatus === 'waived'
-                                  ? '无需收取'
-                                  : '待线下确认'
-                            }
-                          />
-                          <OrderState
-                            label="尾款"
-                            value={
-                              order.finalPaymentStatus === 'recorded'
-                                ? '已记录'
-                                : order.finalPaymentStatus === 'waived'
-                                  ? '无需收取'
-                                  : '待线下确认'
-                            }
-                          />
+                          <OrderState label="币种" value={order.currency} />
+                          <OrderState label="付款状态" value={PAYMENT_STATUS[order.paymentStatus]} />
+                          <OrderState label="定金金额" value={formatAmount(order.depositAmount)} />
+                          <OrderState label="定金状态" value={paymentPartStatus(order.depositStatus)} />
+                          <OrderState label="尾款金额" value={formatAmount(order.finalAmount)} />
+                          <OrderState label="尾款状态" value={paymentPartStatus(order.finalPaymentStatus)} />
                           <OrderState
                             label="交付"
                             value={
@@ -321,6 +371,11 @@ export default function CustomerPortal({
                             }
                           />
                         </dl>
+                        {order.quoteValidUntil && (
+                          <p className="mt-3 text-xs text-studio-faint">
+                            报价有效期至 {dateTime(order.quoteValidUntil)}
+                          </p>
+                        )}
                         {canDecide && (
                           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <button
@@ -341,6 +396,45 @@ export default function CustomerPortal({
                               <X className="h-4 w-4" />
                               {deciding && quoteAction?.decision === 'rejected' ? '正在拒绝' : '拒绝报价'}
                             </button>
+                          </div>
+                        )}
+                        {(canPayDeposit || canPayFinal) && (
+                          <div className="mt-4 border-t border-studio-line pt-4">
+                            <p className="mb-3 text-xs leading-6 text-studio-warning">
+                              本地测试功能：不会发起真实扣款，也不连接任何支付渠道。
+                            </p>
+                            <button
+                              type="button"
+                              disabled={Boolean(paymentAction)}
+                              onClick={() =>
+                                void submitMockPayment(order.id, canPayDeposit ? 'deposit' : 'final')
+                              }
+                              className="button-secondary w-full"
+                            >
+                              {paying
+                                ? '正在记录模拟付款'
+                                : canPayDeposit
+                                  ? '本地测试 / 模拟支付定金'
+                                  : '本地测试 / 模拟支付尾款'}
+                            </button>
+                          </div>
+                        )}
+                        {order.paymentRecords.length > 0 && (
+                          <div className="mt-4 border-t border-studio-line pt-4">
+                            <h4 className="text-xs font-semibold text-studio-ink">付款记录摘要</h4>
+                            <ul className="mt-2 space-y-2 text-xs text-studio-muted">
+                              {order.paymentRecords.slice(0, 3).map((payment) => (
+                                <li key={payment.id} className="flex items-center justify-between gap-3">
+                                  <span>
+                                    {PAYMENT_TYPE[payment.paymentType]} · 本地模拟 ·{' '}
+                                    {payment.status === 'succeeded' ? '成功' : payment.status}
+                                  </span>
+                                  <span>
+                                    {formatAmount(payment.amount)} {payment.currency}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
                           </div>
                         )}
                       </article>

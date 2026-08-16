@@ -42,7 +42,7 @@ def development_data_counts():
     from interactions.models import Inquiry, Review
     from media_library.models import MediaAsset
     from portfolio.models import Category, PublicProcessPost, StudioSetting, Work
-    from projects.models import ClientProject, Order, ProgressUpdate, ProjectMessage
+    from projects.models import ClientProject, Order, PaymentRecord, ProgressUpdate, ProjectMessage
 
     targets = (
         (Review, "评价"),
@@ -59,7 +59,9 @@ def development_data_counts():
         (User, "开发账号"),
         (MediaAsset, "媒体文件"),
     )
-    return {label: model.objects.filter(is_dev_data=True).count() for model, label in targets}
+    counts = {label: model.objects.filter(is_dev_data=True).count() for model, label in targets}
+    counts["付款记录"] = PaymentRecord.objects.filter(order__is_dev_data=True).count()
+    return counts
 
 
 def clear_development_data():
@@ -67,7 +69,7 @@ def clear_development_data():
     from interactions.models import Inquiry, Review
     from media_library.models import MediaAsset
     from portfolio.models import Category, PublicProcessPost, StudioSetting, Work
-    from projects.models import ClientProject, Order, ProgressUpdate, ProjectMessage
+    from projects.models import ClientProject, Order, PaymentRecord, ProgressUpdate, ProjectMessage
 
     targets = (
         (Review, "评论"),
@@ -86,6 +88,7 @@ def clear_development_data():
     counts = development_data_counts()
     try:
         with transaction.atomic():
+            PaymentRecord.objects.filter(order__is_dev_data=True).delete()
             for model, label in targets:
                 queryset = model.objects.filter(is_dev_data=True)
                 queryset.delete()

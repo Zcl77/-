@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     AcknowledgeUpdateView,
     OrderListView,
+    MockPaymentView,
     ProjectDetailView,
     ProjectListView,
     ProjectMessageListCreateView,
@@ -15,6 +16,7 @@ from .views import (
 urlpatterns = [
     path("me/orders", OrderListView.as_view(), name="my-orders"),
     path("me/orders/<uuid:order_id>/quote-decision", QuoteDecisionView.as_view(), name="my-order-quote-decision"),
+    path("me/orders/<uuid:order_id>/mock-payment", MockPaymentView.as_view(), name="my-order-mock-payment"),
     path("me/projects", ProjectListView.as_view(), name="my-projects"),
     path("me/projects/<uuid:project_id>", ProjectDetailView.as_view(), name="my-project-detail"),
     path("me/projects/<uuid:project_id>/stages", ProjectStageListView.as_view(), name="my-project-stages"),

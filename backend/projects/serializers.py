@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.utils import timezone
 from rest_framework import serializers
 
 from common.serializers import StrictModelSerializer, StrictSerializer
@@ -6,6 +8,7 @@ from media_library.serializers import serialize_media
 from .models import (
     ClientProject,
     Order,
+    PaymentRecord,
     ProductionStage,
     ProgressImage,
     ProgressReceipt,
@@ -20,7 +23,27 @@ def user_display_name(user):
     return profile.display_name if profile else user.get_full_name() or user.get_username()
 
 
+class PaymentRecordSerializer(StrictModelSerializer):
+    class Meta:
+        model = PaymentRecord
+        fields = (
+            "id",
+            "payment_type",
+            "channel",
+            "amount",
+            "currency",
+            "status",
+            "mock_transaction_id",
+            "paid_at",
+            "created_at",
+        )
+        read_only_fields = fields
+
+
 class OrderSerializer(StrictModelSerializer):
+    payment_records = PaymentRecordSerializer(many=True, read_only=True)
+    available_actions = serializers.SerializerMethodField()
+
     class Meta:
         model = Order
         fields = (
@@ -29,21 +52,67 @@ class OrderSerializer(StrictModelSerializer):
             "order_type",
             "confirmation_status",
             "agreed_amount",
+            "currency",
+            "deposit_amount",
+            "final_amount",
             "quoted_at",
+            "quote_valid_until",
             "quote_decision",
             "quote_decision_at",
+            "payment_status",
             "deposit_status",
             "final_payment_status",
             "delivery_status",
+            "payment_records",
+            "available_actions",
             "created_at",
             "updated_at",
         )
         read_only_fields = fields
 
+    def get_available_actions(self, obj):
+        actions = []
+        quote_is_valid = obj.quote_valid_until is None or obj.quote_valid_until >= timezone.now()
+        if (
+            obj.confirmation_status == Order.ConfirmationStatus.PROPOSED
+            and obj.quote_decision == Order.QuoteDecision.PENDING
+            and quote_is_valid
+        ):
+            actions.extend(("accept_quote", "reject_quote"))
+
+        request = self.context.get("request")
+        user = request.user if request is not None else obj.customer.user
+        amount_configuration_valid = (
+            obj.agreed_amount is not None
+            and obj.agreed_amount > 0
+            and obj.deposit_amount >= 0
+            and obj.final_amount >= 0
+            and obj.deposit_amount + obj.final_amount == obj.agreed_amount
+            and obj.currency == Order.Currency.CNY
+        )
+        if (
+            settings.MOCK_PAYMENTS_ENABLED
+            and obj.is_mock_payment_eligible_for(user)
+            and obj.confirmation_status == Order.ConfirmationStatus.CONFIRMED
+            and obj.quote_decision == Order.QuoteDecision.ACCEPTED
+            and amount_configuration_valid
+        ):
+            if obj.payment_status == Order.PaymentStatus.DEPOSIT_PENDING and obj.deposit_amount > 0:
+                actions.append("mock_pay_deposit")
+            elif obj.payment_status == Order.PaymentStatus.FINAL_PENDING and obj.final_amount > 0:
+                actions.append("mock_pay_final")
+        return actions
+
 
 class QuoteDecisionSerializer(StrictSerializer):
     decision = serializers.ChoiceField(
         choices=(Order.QuoteDecision.ACCEPTED, Order.QuoteDecision.REJECTED),
+    )
+
+
+class MockPaymentSerializer(StrictSerializer):
+    payment_type = serializers.ChoiceField(
+        choices=(PaymentRecord.PaymentType.DEPOSIT, PaymentRecord.PaymentType.FINAL),
     )
 
 
@@ -163,10 +232,18 @@ class ProjectSummarySerializer(StrictModelSerializer):
 
 
 class ProjectDetailSerializer(ProjectSummarySerializer):
-    order = OrderSerializer(read_only=True)
+    order = serializers.SerializerMethodField()
 
     class Meta(ProjectSummarySerializer.Meta):
         fields = ProjectSummarySerializer.Meta.fields + ("order",)
+
+    def get_order(self, obj):
+        user = self.context["request"].user
+        if user.is_staff:
+            return OrderSerializer(obj.order).data if user.has_perm("projects.view_order") else None
+        if obj.order.customer.user_id != user.pk:
+            return None
+        return OrderSerializer(obj.order).data
 
 
 class ProjectMessageSerializer(StrictModelSerializer):

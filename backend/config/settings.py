@@ -24,6 +24,7 @@ if not SECRET_KEY:
 
 DEBUG = env_bool("DJANGO_DEBUG")
 ENVIRONMENT = os.getenv("DJANGO_ENVIRONMENT", "production").strip().lower()
+MOCK_PAYMENTS_ENABLED = ENVIRONMENT == "development" and env_bool("DJANGO_ENABLE_MOCK_PAYMENTS")
 development_hosts = "localhost,127.0.0.1,backend" if DEBUG or TESTING else ""
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", development_hosts)
 if not ALLOWED_HOSTS:
@@ -176,6 +177,7 @@ REST_FRAMEWORK = {
         "inquiry-submit": "5/hour",
         "project-message": "30/hour",
         "quote-decision": "12/hour",
+        "mock-payment": "12/hour",
     },
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,

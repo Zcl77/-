@@ -164,6 +164,11 @@ docker compose exec backend python manage.py clean_dev_data --apply
 
 请勿在本地验收数据中录入真实客户资料、联系方式或商业金额。
 
+本地验收“模拟支付”时，需同时将 `.env` 中的 `DJANGO_ENVIRONMENT` 设为
+`development`、将 `DJANGO_ENABLE_MOCK_PAYMENTS` 设为 `true`，并重新创建后端容器使配置生效。
+入口只会对同时标记为开发数据的客户账号和订单显示；生产环境即使误设开关，后端也会拒绝请求。
+该功能不接入任何支付渠道，不代表真实收款。验收结束后应将开关恢复为 `false`。
+
 ## 管理员与客户账号
 
 使用交互命令创建首个管理员，密码输入不会出现在命令历史中，也没有默认管理员密码：

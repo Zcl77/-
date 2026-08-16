@@ -103,14 +103,33 @@ interface RawOrder {
   order_type: string;
   confirmation_status: CustomerOrder['confirmationStatus'];
   agreed_amount: string | null;
+  currency: CustomerOrder['currency'];
+  deposit_amount: string;
+  final_amount: string;
   quoted_at: string | null;
+  quote_valid_until: string | null;
   quote_decision: CustomerOrder['quoteDecision'];
   quote_decision_at: string | null;
+  payment_status: CustomerOrder['paymentStatus'];
   deposit_status: CustomerOrder['depositStatus'];
   final_payment_status: CustomerOrder['finalPaymentStatus'];
   delivery_status: CustomerOrder['deliveryStatus'];
+  payment_records: RawPaymentRecord[];
+  available_actions: CustomerOrder['availableActions'];
   created_at: string;
   updated_at: string;
+}
+
+interface RawPaymentRecord {
+  id: string;
+  payment_type: CustomerOrder['paymentRecords'][number]['paymentType'];
+  channel: 'mock';
+  amount: string;
+  currency: 'CNY';
+  status: CustomerOrder['paymentRecords'][number]['status'];
+  mock_transaction_id: string | null;
+  paid_at: string | null;
+  created_at: string;
 }
 
 interface RawStage {
@@ -241,12 +260,29 @@ function mapOrder(order: RawOrder): CustomerOrder {
     orderType: order.order_type,
     confirmationStatus: order.confirmation_status,
     agreedAmount: order.agreed_amount,
+    currency: order.currency,
+    depositAmount: order.deposit_amount,
+    finalAmount: order.final_amount,
     quotedAt: order.quoted_at,
+    quoteValidUntil: order.quote_valid_until,
     quoteDecision: order.quote_decision,
     quoteDecisionAt: order.quote_decision_at,
+    paymentStatus: order.payment_status,
     depositStatus: order.deposit_status,
     finalPaymentStatus: order.final_payment_status,
     deliveryStatus: order.delivery_status,
+    paymentRecords: order.payment_records.map((payment) => ({
+      id: payment.id,
+      paymentType: payment.payment_type,
+      channel: payment.channel,
+      amount: payment.amount,
+      currency: payment.currency,
+      status: payment.status,
+      mockTransactionId: payment.mock_transaction_id,
+      paidAt: payment.paid_at,
+      createdAt: payment.created_at,
+    })),
+    availableActions: order.available_actions,
     createdAt: order.created_at,
     updatedAt: order.updated_at,
   };
@@ -394,6 +430,19 @@ export async function decideQuote(orderId: string, decision: 'accepted' | 'rejec
     },
   );
   return { order: mapOrder(response.order), changed: response.changed, message: response.message };
+}
+
+export async function mockPayOrder(orderId: string, paymentType: 'deposit' | 'final') {
+  const response = await apiRequest<{
+    order: RawOrder;
+    payment: RawPaymentRecord;
+    created: boolean;
+    message: string;
+  }>(`/me/orders/${orderId}/mock-payment`, {
+    method: 'POST',
+    body: JSON.stringify({ payment_type: paymentType }),
+  });
+  return { order: mapOrder(response.order), created: response.created, message: response.message };
 }
 
 export async function getMyProjects(): Promise<CustomerProject[]> {

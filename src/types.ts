@@ -123,18 +123,38 @@ export interface AuthenticatedUser {
 
 export type CurrentUser = AuthenticatedUser | { authenticated: false };
 
+export interface CustomerPaymentRecord {
+  id: string;
+  paymentType: 'deposit' | 'final' | 'refund';
+  channel: 'mock';
+  amount: string;
+  currency: 'CNY';
+  status: 'pending' | 'succeeded' | 'failed' | 'refunded';
+  mockTransactionId: string | null;
+  paidAt: string | null;
+  createdAt: string;
+}
+
 export interface CustomerOrder {
   id: string;
   orderNumber: string;
   orderType: string;
   confirmationStatus: 'inquiry' | 'proposed' | 'confirmed' | 'cancelled';
   agreedAmount: string | null;
+  currency: 'CNY';
+  depositAmount: string;
+  finalAmount: string;
   quotedAt: string | null;
+  quoteValidUntil: string | null;
   quoteDecision: 'none' | 'pending' | 'accepted' | 'rejected';
   quoteDecisionAt: string | null;
+  paymentStatus:
+    'unpaid' | 'deposit_pending' | 'deposit_paid' | 'final_pending' | 'paid' | 'cancelled' | 'refunded';
   depositStatus: 'not_recorded' | 'pending' | 'recorded' | 'waived';
   finalPaymentStatus: 'not_recorded' | 'pending' | 'recorded' | 'waived';
   deliveryStatus: 'not_ready' | 'ready' | 'delivered';
+  paymentRecords: CustomerPaymentRecord[];
+  availableActions: Array<'accept_quote' | 'reject_quote' | 'mock_pay_deposit' | 'mock_pay_final'>;
   createdAt: string;
   updatedAt: string;
 }

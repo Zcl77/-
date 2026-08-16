@@ -1,4 +1,5 @@
 from django.db import IntegrityError, transaction
+from django.conf import settings
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -26,6 +27,8 @@ from .models import (
 )
 from .serializers import (
     OrderSerializer,
+    MockPaymentSerializer,
+    PaymentRecordSerializer,
     ProductionStageSerializer,
     ProgressUpdateSerializer,
     ProjectDetailSerializer,
@@ -34,7 +37,7 @@ from .serializers import (
     ProjectSummarySerializer,
     QuoteDecisionSerializer,
 )
-from .services import decide_quote
+from .services import decide_quote, record_mock_payment
 
 
 PRIVATE_PERMISSIONS = [IsAuthenticated, HasCompletedPasswordChange, IsCustomerOrStaff]
@@ -71,8 +74,11 @@ def projects_with_summary_data(user):
     )
     return (
         accessible_projects(user)
-        .select_related("order", "order__customer", "manager", "current_stage")
-        .prefetch_related(Prefetch("progress_updates", queryset=updates, to_attr="visible_updates"))
+        .select_related("order", "order__customer", "order__customer__user", "manager", "current_stage")
+        .prefetch_related(
+            "order__payment_records",
+            Prefetch("progress_updates", queryset=updates, to_attr="visible_updates"),
+        )
     )
 
 
@@ -89,7 +95,12 @@ class OrderListView(PrivateListView):
     serializer_class = OrderSerializer
 
     def get_queryset(self):
-        return accessible_orders(self.request.user).select_related("customer").order_by("-created_at")
+        return (
+            accessible_orders(self.request.user)
+            .select_related("customer", "customer__user")
+            .prefetch_related("payment_records")
+            .order_by("-created_at")
+        )
 
 
 @method_decorator([never_cache, csrf_protect], name="dispatch")
@@ -121,6 +132,46 @@ class QuoteDecisionView(APIView):
                 "changed": changed,
                 "message": "报价决定已记录。" if changed else "该报价决定已经记录，无需重复提交。",
             }
+        )
+
+
+@method_decorator([never_cache, csrf_protect], name="dispatch")
+class MockPaymentView(APIView):
+    permission_classes = PRIVATE_PERMISSIONS
+    throttle_scope = "mock-payment"
+
+    def post(self, request, order_id):
+        if not settings.MOCK_PAYMENTS_ENABLED:
+            raise PermissionDenied("模拟付款仅在本地开发和自动测试环境开放。")
+        if request.user.is_staff:
+            raise PermissionDenied("工作室账号不能代替客户执行模拟付款。")
+        get_object_or_404(accessible_orders(request.user), pk=order_id)
+        serializer = MockPaymentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            order, payment, created = record_mock_payment(
+                order_id=order_id,
+                customer_user=request.user,
+                payment_type=serializer.validated_data["payment_type"],
+            )
+        except Exception as exc:
+            from django.core.exceptions import ValidationError as DjangoValidationError
+
+            if isinstance(exc, DjangoValidationError):
+                raise ApiValidationError(exc.messages) from exc
+            raise
+        return Response(
+            {
+                "order": OrderSerializer(order).data,
+                "payment": PaymentRecordSerializer(payment).data,
+                "created": created,
+                "message": (
+                    "本地模拟付款已记录；该记录不代表真实收款。"
+                    if created
+                    else "该模拟付款已记录，无需重复提交。"
+                ),
+            },
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
 

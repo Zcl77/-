@@ -10,6 +10,7 @@ import {
 } from '../../services/api/repositories';
 import { CustomerProject, ProductionStage, ProgressUpdateItem, ProjectMessageItem } from '../../types';
 import { LatestRequestGate, useVisiblePolling } from '../../hooks/useVisiblePolling';
+import { formatCnyAmount as formatAmount } from '../../domain/orderPayment';
 import MediaLightbox from '../ui/MediaLightbox';
 import SmartImage from '../ui/SmartImage';
 import StatusNotice from '../ui/StatusNotice';
@@ -35,6 +36,16 @@ function formatDate(value: string | null | undefined, includeTime = false) {
     ...(includeTime ? { hour: '2-digit', minute: '2-digit' } : {}),
   }).format(new Date(value));
 }
+
+const PAYMENT_STATUS = {
+  unpaid: '未付款',
+  deposit_pending: '定金待支付',
+  deposit_paid: '定金已支付',
+  final_pending: '尾款待支付',
+  paid: '已付清',
+  cancelled: '已取消',
+  refunded: '已退款',
+} as const;
 
 export default function CustomerProjectDetail({ projectId, onBack }: CustomerProjectDetailProps) {
   const [project, setProject] = useState<CustomerProject | null>(null);
@@ -361,10 +372,40 @@ export default function CustomerProjectDetail({ projectId, onBack }: CustomerPro
             </h2>
             <dl className="mt-4 divide-y divide-studio-line text-xs">
               <SummaryRow label="订单编号" value={project.order?.orderNumber || '未关联'} />
+              <SummaryRow label="报价金额" value={formatAmount(project.order?.agreedAmount)} />
+              <SummaryRow label="定金金额" value={formatAmount(project.order?.depositAmount)} />
+              <SummaryRow label="尾款金额" value={formatAmount(project.order?.finalAmount)} />
+              <SummaryRow
+                label="付款状态"
+                value={project.order ? PAYMENT_STATUS[project.order.paymentStatus] : '未关联'}
+              />
+              <SummaryRow label="制作阶段" value={project.currentStage?.name || '尚未设置'} />
               <SummaryRow label="项目负责人" value={project.manager?.displayName || '工作室待分配'} />
               <SummaryRow label="下一步计划" value={project.nextPlan || '暂未设置'} />
               <SummaryRow label="预计下次更新" value={formatDate(project.expectedNextUpdateAt)} />
             </dl>
+            {project.order && project.order.paymentRecords.length > 0 && (
+              <div className="mt-5 border-t border-studio-line pt-4">
+                <h3 className="text-xs font-semibold text-studio-ink">付款记录摘要</h3>
+                <ul className="mt-3 space-y-2 text-xs text-studio-muted">
+                  {project.order.paymentRecords.slice(0, 3).map((payment) => (
+                    <li key={payment.id} className="flex items-center justify-between gap-3">
+                      <span>
+                        {payment.paymentType === 'deposit'
+                          ? '定金'
+                          : payment.paymentType === 'final'
+                            ? '尾款'
+                            : '退款'}{' '}
+                        · 本地模拟
+                      </span>
+                      <span>
+                        {formatAmount(payment.amount)} {payment.currency}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </section>
 
           <section className="mt-6" aria-labelledby="project-messages-title">

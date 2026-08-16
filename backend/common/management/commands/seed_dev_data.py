@@ -1,6 +1,7 @@
 import io
 import secrets
 from datetime import timedelta
+from decimal import Decimal
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management.base import BaseCommand, CommandError
@@ -242,6 +243,15 @@ class Command(BaseCommand):
                     customer=profile,
                     order_type="本地流程验收",
                     confirmation_status=Order.ConfirmationStatus.CONFIRMED,
+                    agreed_amount=Decimal("12888.00"),
+                    deposit_amount=Decimal("3888.00"),
+                    final_amount=Decimal("9000.00"),
+                    quoted_at=timezone.now(),
+                    quote_decision=Order.QuoteDecision.ACCEPTED,
+                    quote_decision_at=timezone.now(),
+                    payment_status=Order.PaymentStatus.DEPOSIT_PENDING,
+                    deposit_status=Order.PaymentRecordStatus.PENDING,
+                    final_payment_status=Order.PaymentRecordStatus.PENDING,
                     notes="本地开发数据，不代表真实交易。",
                     is_dev_data=True,
                 )

@@ -1,14 +1,19 @@
+from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
+from django.contrib.admin.sites import AdminSite
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 from django.forms.models import inlineformset_factory
-from django.test import TransactionTestCase
+from django.test import RequestFactory, TransactionTestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.models import CustomerProfile, User
 from common.tests.utils import TEST_PASSWORD
-from projects.admin import ProjectMembershipInlineFormSet
-from projects.models import ClientProject, Order, ProductionStage, ProgressUpdate, ProjectMembership
+from projects.admin import OrderAdmin, PaymentRecordAdmin, ProjectMembershipInlineFormSet
+from projects.models import ClientProject, Order, PaymentRecord, ProductionStage, ProgressUpdate, ProjectMembership
 from projects.services import ensure_project_scaffold
 
 
@@ -43,6 +48,14 @@ class OrderWorkflowTests(TransactionTestCase):
         order.save()
         return order
 
+    def mark_mock_payment_eligible(self, order, user, profile):
+        user.is_dev_data = True
+        user.save(update_fields=["is_dev_data", "updated_at"])
+        profile.is_dev_data = True
+        profile.save(update_fields=["is_dev_data", "updated_at"])
+        order.is_dev_data = True
+        order.save(update_fields=["is_dev_data", "updated_at"])
+
     def test_customer_accepts_quote_once_and_project_is_created(self):
         order = self.proposed_order(self.profile_a)
         client = APIClient()
@@ -55,6 +68,8 @@ class OrderWorkflowTests(TransactionTestCase):
         order.refresh_from_db()
         self.assertEqual(order.confirmation_status, Order.ConfirmationStatus.CONFIRMED)
         self.assertEqual(order.quote_decision, Order.QuoteDecision.ACCEPTED)
+        self.assertEqual(order.payment_status, Order.PaymentStatus.FINAL_PENDING)
+        self.assertEqual(order.final_amount, Decimal("12888.50"))
         self.assertIsNotNone(order.quote_decision_at)
         project = order.projects.get()
         self.assertEqual(project.status, ClientProject.Status.ACTIVE)
@@ -75,7 +90,212 @@ class OrderWorkflowTests(TransactionTestCase):
         self.assertEqual(client.post(url, {"decision": "rejected"}, format="json").status_code, 200)
         project.refresh_from_db()
         self.assertEqual(project.status, ClientProject.Status.CANCELLED)
+        order.refresh_from_db()
+        self.assertEqual(order.payment_status, Order.PaymentStatus.CANCELLED)
         self.assertEqual(client.post(url, {"decision": "accepted"}, format="json").status_code, 400)
+
+    def test_amounts_use_decimal_and_calculate_the_final_balance(self):
+        order = Order(
+            order_number="QUOTE-AMOUNTS",
+            customer=self.profile_a,
+            order_type="金额计算测试",
+            confirmation_status=Order.ConfirmationStatus.PROPOSED,
+            agreed_amount=Decimal("1000.10"),
+            deposit_amount=Decimal("300.03"),
+        )
+        order.full_clean()
+        self.assertEqual(order.final_amount, Decimal("700.07"))
+        order.save()
+        order.refresh_from_db()
+        self.assertEqual(order.deposit_amount + order.final_amount, order.agreed_amount)
+        self.assertEqual(order.currency, Order.Currency.CNY)
+
+    @override_settings(MOCK_PAYMENTS_ENABLED=True)
+    def test_deposit_and_final_mock_payments_advance_order_status(self):
+        order = Order(
+            order_number="QUOTE-MOCK-PAY",
+            customer=self.profile_a,
+            order_type="模拟付款测试",
+            confirmation_status=Order.ConfirmationStatus.PROPOSED,
+            agreed_amount=Decimal("1000.00"),
+            deposit_amount=Decimal("300.00"),
+        )
+        order.full_clean()
+        order.save()
+        self.mark_mock_payment_eligible(order, self.customer_a, self.profile_a)
+        client = APIClient()
+        client.force_login(self.customer_a)
+        quote_url = f"/api/v1/me/orders/{order.pk}/quote-decision"
+        payment_url = f"/api/v1/me/orders/{order.pk}/mock-payment"
+
+        quote = client.post(quote_url, {"decision": "accepted"}, format="json")
+        self.assertEqual(quote.status_code, 200)
+        self.assertEqual(quote.json()["order"]["available_actions"], ["mock_pay_deposit"])
+        order.refresh_from_db()
+        self.assertEqual(order.payment_status, Order.PaymentStatus.DEPOSIT_PENDING)
+
+        self.assertEqual(
+            client.post(payment_url, {"payment_type": "deposit", "amount": "0.01"}, format="json").status_code,
+            400,
+        )
+        premature_final = client.post(payment_url, {"payment_type": "final"}, format="json")
+        self.assertEqual(premature_final.status_code, 400)
+        self.assertEqual(premature_final.json()["error"]["code"], "invalid")
+        self.assertIn("尾款待支付", premature_final.json()["error"]["message"])
+        self.assertFalse(order.payment_records.exists())
+
+        deposit = client.post(payment_url, {"payment_type": "deposit"}, format="json")
+        self.assertEqual(deposit.status_code, 201)
+        self.assertTrue(deposit.json()["created"])
+        self.assertEqual(deposit.json()["order"]["available_actions"], ["mock_pay_final"])
+        self.assertIn("不代表真实收款", deposit.json()["message"])
+        order.refresh_from_db()
+        self.assertEqual(order.payment_status, Order.PaymentStatus.FINAL_PENDING)
+        self.assertEqual(order.deposit_status, Order.PaymentRecordStatus.RECORDED)
+
+        duplicate_deposit = client.post(payment_url, {"payment_type": "deposit"}, format="json")
+        self.assertEqual(duplicate_deposit.status_code, 200)
+        self.assertFalse(duplicate_deposit.json()["created"])
+        self.assertEqual(duplicate_deposit.json()["payment"]["id"], deposit.json()["payment"]["id"])
+        self.assertEqual(order.payment_records.count(), 1)
+
+        final = client.post(payment_url, {"payment_type": "final"}, format="json")
+        self.assertEqual(final.status_code, 201)
+        self.assertTrue(final.json()["created"])
+        self.assertEqual(final.json()["order"]["available_actions"], [])
+        order.refresh_from_db()
+        self.assertEqual(order.payment_status, Order.PaymentStatus.PAID)
+        self.assertEqual(order.final_payment_status, Order.PaymentRecordStatus.RECORDED)
+        self.assertEqual(order.payment_records.count(), 2)
+        self.assertEqual(
+            list(order.payment_records.order_by("created_at").values_list("amount", flat=True)),
+            [Decimal("300.00"), Decimal("700.00")],
+        )
+        self.assertTrue(
+            all(
+                record.channel == PaymentRecord.Channel.MOCK
+                and record.currency == Order.Currency.CNY
+                and record.status == PaymentRecord.Status.SUCCEEDED
+                and record.mock_transaction_id.startswith("MOCK-")
+                and record.idempotency_key.startswith(f"mock:{order.pk}:")
+                and record.paid_at is not None
+                for record in order.payment_records.all()
+            )
+        )
+        duplicate_final = client.post(payment_url, {"payment_type": "final"}, format="json")
+        self.assertEqual(duplicate_final.status_code, 200)
+        self.assertFalse(duplicate_final.json()["created"])
+        self.assertEqual(duplicate_final.json()["payment"]["id"], final.json()["payment"]["id"])
+        self.assertEqual(order.payment_records.count(), 2)
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            PaymentRecord.objects.create(
+                order=order,
+                payment_type=PaymentRecord.PaymentType.FINAL,
+                channel=PaymentRecord.Channel.MOCK,
+                amount=order.final_amount,
+                currency=order.currency,
+                status=PaymentRecord.Status.SUCCEEDED,
+                mock_transaction_id="MOCK-DUPLICATE-STATE",
+                idempotency_key=f"mock:{order.pk}:final:succeeded",
+            )
+
+    @override_settings(MOCK_PAYMENTS_ENABLED=True)
+    def test_non_development_customer_or_order_cannot_use_mock_payment(self):
+        order = self.proposed_order(self.profile_a, "QUOTE-MOCK-NONDEV")
+        client = APIClient()
+        client.force_login(self.customer_a)
+        client.post(
+            f"/api/v1/me/orders/{order.pk}/quote-decision",
+            {"decision": "accepted"},
+            format="json",
+        )
+        payment_url = f"/api/v1/me/orders/{order.pk}/mock-payment"
+
+        self.assertEqual(client.post(payment_url, {"payment_type": "final"}, format="json").status_code, 400)
+        order.is_dev_data = True
+        order.save(update_fields=["is_dev_data", "updated_at"])
+        self.assertEqual(client.post(payment_url, {"payment_type": "final"}, format="json").status_code, 400)
+        order.is_dev_data = False
+        order.save(update_fields=["is_dev_data", "updated_at"])
+        self.customer_a.is_dev_data = True
+        self.customer_a.save(update_fields=["is_dev_data", "updated_at"])
+        self.profile_a.is_dev_data = True
+        self.profile_a.save(update_fields=["is_dev_data", "updated_at"])
+        self.assertEqual(client.post(payment_url, {"payment_type": "final"}, format="json").status_code, 400)
+        self.assertFalse(order.payment_records.exists())
+
+    @override_settings(MOCK_PAYMENTS_ENABLED=True)
+    def test_other_customer_cannot_view_or_create_payment_records(self):
+        order = self.proposed_order(self.profile_a, "QUOTE-PAYMENT-PRIVATE")
+        owner = APIClient()
+        owner.force_login(self.customer_a)
+        owner.post(f"/api/v1/me/orders/{order.pk}/quote-decision", {"decision": "accepted"}, format="json")
+
+        outsider = APIClient()
+        outsider.force_login(self.customer_b)
+        url = f"/api/v1/me/orders/{order.pk}/mock-payment"
+        self.assertEqual(outsider.post(url, {"payment_type": "final"}, format="json").status_code, 404)
+        self.assertEqual(order.payment_records.count(), 0)
+        self.assertNotIn(
+            str(order.pk),
+            [item["id"] for item in outsider.get("/api/v1/me/orders").json()["results"]],
+        )
+
+    def test_expired_quote_cannot_be_accepted(self):
+        order = self.proposed_order(self.profile_a, "QUOTE-EXPIRED")
+        order.quote_valid_until = timezone.now() - timedelta(minutes=1)
+        order.save(update_fields=["quote_valid_until", "updated_at"])
+        client = APIClient()
+        client.force_login(self.customer_a)
+        response = client.post(
+            f"/api/v1/me/orders/{order.pk}/quote-decision",
+            {"decision": "accepted"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        rejected = client.post(
+            f"/api/v1/me/orders/{order.pk}/quote-decision",
+            {"decision": "rejected"},
+            format="json",
+        )
+        self.assertEqual(rejected.status_code, 400)
+        order.refresh_from_db()
+        self.assertEqual(order.quote_decision, Order.QuoteDecision.PENDING)
+
+    @override_settings(MOCK_PAYMENTS_ENABLED=False)
+    def test_mock_payment_is_blocked_outside_local_and_test_environments(self):
+        order = self.proposed_order(self.profile_a, "QUOTE-MOCK-DISABLED")
+        self.mark_mock_payment_eligible(order, self.customer_a, self.profile_a)
+        client = APIClient()
+        client.force_login(self.customer_a)
+        client.post(
+            f"/api/v1/me/orders/{order.pk}/quote-decision",
+            {"decision": "accepted"},
+            format="json",
+        )
+        response = client.post(
+            f"/api/v1/me/orders/{order.pk}/mock-payment",
+            {"payment_type": "final"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(order.payment_records.exists())
+        serialized = client.get("/api/v1/me/orders").json()["results"][0]
+        self.assertNotIn("mock_pay_final", serialized["available_actions"])
+
+    def test_only_supported_cny_currency_is_accepted(self):
+        order = Order(
+            order_number="QUOTE-USD-REJECTED",
+            customer=self.profile_a,
+            order_type="币种校验测试",
+            confirmation_status=Order.ConfirmationStatus.PROPOSED,
+            agreed_amount=Decimal("100.00"),
+            currency="USD",
+        )
+        with self.assertRaises(ValidationError) as caught:
+            order.full_clean()
+        self.assertIn("currency", caught.exception.message_dict)
 
     def test_requoting_replaces_the_old_decision_and_timestamp(self):
         order = self.proposed_order(self.profile_a, "QUOTE-REVISED")
@@ -178,6 +398,31 @@ class OrderWorkflowTests(TransactionTestCase):
         formset = FormSet(data=data, instance=project, prefix="memberships")
         self.assertFalse(formset.is_valid())
         self.assertIn("同一客户不能重复添加", str(formset.errors))
+
+    def test_admin_protects_payment_audit_fields_and_paid_order_amounts(self):
+        order = self.proposed_order(self.profile_a, "QUOTE-ADMIN-AUDIT")
+        PaymentRecord.objects.create(
+            order=order,
+            payment_type=PaymentRecord.PaymentType.FINAL,
+            amount=order.final_amount,
+            currency=order.currency,
+            status=PaymentRecord.Status.SUCCEEDED,
+            mock_transaction_id="MOCK-ADMIN-AUDIT",
+            idempotency_key=f"mock:{order.pk}:final:succeeded",
+        )
+        request = RequestFactory().get("/admin/projects/order/")
+        request.user = self.staff
+        site = AdminSite()
+        payment_admin = PaymentRecordAdmin(PaymentRecord, site)
+        order_admin = OrderAdmin(Order, site)
+
+        self.assertFalse(payment_admin.has_add_permission(request))
+        self.assertFalse(payment_admin.has_delete_permission(request))
+        self.assertIn("mock_transaction_id", payment_admin.get_readonly_fields(request))
+        self.assertIn("paid_at", payment_admin.get_readonly_fields(request))
+        self.assertIn("agreed_amount", order_admin.get_readonly_fields(request, order))
+        self.assertIn("deposit_amount", order_admin.get_readonly_fields(request, order))
+        self.assertIn("final_amount", order_admin.get_readonly_fields(request, order))
 
     def test_published_progress_gets_timestamp_before_constraint_validation(self):
         order = self.proposed_order(self.profile_a, "QUOTE-PROGRESS")

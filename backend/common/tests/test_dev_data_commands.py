@@ -8,7 +8,7 @@ from django.test import TransactionTestCase, override_settings
 from accounts.models import User
 from media_library.models import MediaAsset
 from portfolio.models import Category, StudioSetting, Work
-from projects.models import ClientProject, ProjectMembership
+from projects.models import ClientProject, PaymentRecord, ProjectMembership
 
 
 class DevelopmentDataCommandTests(TransactionTestCase):
@@ -54,6 +54,13 @@ class DevelopmentDataCommandTests(TransactionTestCase):
             self.assertTrue(Work.objects.filter(status=Work.Status.PUBLISHED, is_dev_data=True).exists())
             self.assertIsNotNone(asset)
             self.assertTrue(asset.original.storage.exists(asset.original.name))
+            payment = PaymentRecord.objects.create(
+                order=project.order,
+                payment_type=PaymentRecord.PaymentType.DEPOSIT,
+                amount="3888.00",
+                status=PaymentRecord.Status.SUCCEEDED,
+                mock_transaction_id="MOCK-DEV-CLEANUP",
+            )
 
             with self.assertRaises(CommandError):
                 call_command("seed_dev_data", stdout=io.StringIO())
@@ -67,5 +74,6 @@ class DevelopmentDataCommandTests(TransactionTestCase):
 
         self.assertFalse(User.objects.filter(is_dev_data=True).exists())
         self.assertFalse(MediaAsset.objects.filter(is_dev_data=True).exists())
+        self.assertFalse(PaymentRecord.objects.filter(pk=payment.pk).exists())
         self.assertTrue(Category.objects.filter(pk=real_category.pk).exists())
         self.assertTrue(StudioSetting.objects.filter(pk=real_setting.pk).exists())
