@@ -6,7 +6,7 @@ from rest_framework.test import APIClient
 from common.tests.utils import image_upload
 from media_library.models import MediaAsset
 
-from portfolio.models import Category, PublicProcessPost, Work, WorkImage
+from portfolio.models import Category, PublicProcessPost, StudioSetting, Work, WorkImage
 
 
 class PublicPortfolioApiTests(TransactionTestCase):
@@ -18,11 +18,21 @@ class PublicPortfolioApiTests(TransactionTestCase):
         self.addCleanup(self.settings_override.disable)
         self.client = APIClient()
 
-        self.visible_category = Category.objects.create(name="公开分类", is_visible=True, is_dev_data=True)
+        self.visible_category = Category.objects.create(
+            name="公开分类",
+            name_en="Public category",
+            description="中文分类说明",
+            description_en="English category description",
+            is_visible=True,
+            is_dev_data=True,
+        )
         self.hidden_category = Category.objects.create(name="隐藏分类", is_visible=False, is_dev_data=True)
         self.visible_work = Work.objects.create(
             category=self.visible_category,
             title="公开作品",
+            title_en="Public work",
+            summary="中文摘要",
+            summary_en="English summary",
             status=Work.Status.PUBLISHED,
             is_dev_data=True,
         )
@@ -49,6 +59,7 @@ class PublicPortfolioApiTests(TransactionTestCase):
             media=self.public_asset,
             kind=WorkImage.Kind.COVER,
             alt_text="公开作品封面",
+            alt_text_en="Public work cover",
         )
         WorkImage.objects.create(
             work=self.hidden_work,
@@ -96,3 +107,45 @@ class PublicPortfolioApiTests(TransactionTestCase):
         self.assertTrue(self.visible_work.slug.startswith("work-"))
         post = PublicProcessPost.objects.create(title="中文日志", body="内容", is_dev_data=True)
         self.assertTrue(post.slug.startswith("process-"))
+
+    def test_english_dynamic_content_is_selected_by_accept_language(self):
+        PublicProcessPost.objects.create(
+            title="中文日志",
+            title_en="English process post",
+            summary="中文日志摘要",
+            summary_en="English process summary",
+            body="中文日志正文",
+            body_en="English process body",
+            status=PublicProcessPost.Status.PUBLISHED,
+            is_dev_data=True,
+        )
+        StudioSetting.objects.create(
+            tagline="中文标语",
+            tagline_en="English tagline",
+            description="中文工作室说明",
+            description_en="English studio description",
+            is_dev_data=True,
+        )
+        categories = self.client.get("/api/v1/categories", HTTP_ACCEPT_LANGUAGE="en-US")
+        works = self.client.get("/api/v1/works", HTTP_ACCEPT_LANGUAGE="en")
+        process = self.client.get("/api/v1/public-process", HTTP_ACCEPT_LANGUAGE="en")
+        site = self.client.get("/api/v1/site", HTTP_ACCEPT_LANGUAGE="en")
+
+        self.assertEqual(categories.json()[0]["name"], "Public category")
+        self.assertEqual(categories.json()[0]["description"], "English category description")
+        self.assertEqual(works.json()["results"][0]["title"], "Public work")
+        self.assertEqual(works.json()["results"][0]["summary"], "English summary")
+        self.assertEqual(works.json()["results"][0]["cover"]["alt_text"], "Public work cover")
+        self.assertEqual(process.json()["results"][0]["title"], "English process post")
+        self.assertEqual(process.json()["results"][0]["body"], "English process body")
+        self.assertEqual(site.json()["tagline"], "English tagline")
+        self.assertEqual(site.json()["description"], "English studio description")
+
+    def test_english_dynamic_content_falls_back_to_existing_chinese(self):
+        self.visible_work.title_en = ""
+        self.visible_work.summary_en = ""
+        self.visible_work.save(update_fields=["title_en", "summary_en", "updated_at"])
+
+        work = self.client.get(f"/api/v1/works/{self.visible_work.slug}", HTTP_ACCEPT_LANGUAGE="en").json()
+        self.assertEqual(work["title"], "公开作品")
+        self.assertEqual(work["summary"], "中文摘要")

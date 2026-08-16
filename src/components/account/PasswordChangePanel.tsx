@@ -1,12 +1,14 @@
 import { FormEvent, useState } from 'react';
 import { KeyRound } from 'lucide-react';
 import StatusNotice from '../ui/StatusNotice';
+import { useI18n } from '../../i18n';
 
 interface PasswordChangePanelProps {
   onChangePassword: (currentPassword: string, newPassword: string) => Promise<unknown>;
 }
 
 export default function PasswordChangePanel({ onChangePassword }: PasswordChangePanelProps) {
+  const { t, errorMessage } = useI18n();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
@@ -17,7 +19,7 @@ export default function PasswordChangePanel({ onChangePassword }: PasswordChange
     event.preventDefault();
     setError(null);
     if (newPassword !== confirmation) {
-      setError('两次输入的新密码不一致。');
+      setError(t('两次输入的新密码不一致。'));
       return;
     }
     setSubmitting(true);
@@ -27,7 +29,7 @@ export default function PasswordChangePanel({ onChangePassword }: PasswordChange
       setNewPassword('');
       setConfirmation('');
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '密码修改失败。');
+      setError(errorMessage(reason, '密码修改失败。'));
     } finally {
       setSubmitting(false);
     }
@@ -38,18 +40,20 @@ export default function PasswordChangePanel({ onChangePassword }: PasswordChange
       className="mx-auto w-full max-w-lg border-y border-studio-line py-8"
       aria-labelledby="change-password-title"
     >
-      <span className="page-kicker">First sign in</span>
+      <span className="page-kicker">{t('首次登录')}</span>
       <h1 id="change-password-title" className="page-title mt-2">
-        请先设置新密码
+        {t('请先设置新密码')}
       </h1>
       <p className="page-description mt-3">
-        当前密码是工作室交付的临时凭据。修改成功前，私人项目内容保持锁定。
+        {t('当前密码是工作室交付的临时凭据。修改成功前，私人项目内容保持锁定。')}
       </p>
-      {error && <StatusNotice tone="error" compact title="密码未修改" description={error} className="mt-6" />}
+      {error && (
+        <StatusNotice tone="error" compact title={t('密码未修改')} description={error} className="mt-6" />
+      )}
       <form onSubmit={submit} className="mt-7 space-y-5">
         <div>
           <label htmlFor="current-password" className="field-label">
-            当前临时密码
+            {t('当前临时密码')}
           </label>
           <input
             id="current-password"
@@ -63,7 +67,7 @@ export default function PasswordChangePanel({ onChangePassword }: PasswordChange
         </div>
         <div>
           <label htmlFor="new-password" className="field-label">
-            新密码
+            {t('新密码')}
           </label>
           <input
             id="new-password"
@@ -78,7 +82,7 @@ export default function PasswordChangePanel({ onChangePassword }: PasswordChange
         </div>
         <div>
           <label htmlFor="confirm-password" className="field-label">
-            再次输入新密码
+            {t('再次输入新密码')}
           </label>
           <input
             id="confirm-password"
@@ -92,7 +96,7 @@ export default function PasswordChangePanel({ onChangePassword }: PasswordChange
         </div>
         <button type="submit" disabled={submitting} className="button-primary w-full">
           <KeyRound className="h-4 w-4" />
-          {submitting ? '正在修改' : '保存新密码并进入项目'}
+          {t(submitting ? '正在修改' : '保存新密码并进入项目')}
         </button>
       </form>
     </section>

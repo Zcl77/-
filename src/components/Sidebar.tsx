@@ -1,4 +1,6 @@
 import { BookOpenText, Images, MessageSquareText, UserRound } from 'lucide-react';
+import { useI18n } from '../i18n';
+import LanguageSwitcher from './ui/LanguageSwitcher';
 
 export type AppTab = 'gallery' | 'process' | 'contact' | 'account';
 
@@ -20,12 +22,13 @@ const BASE_ITEMS: Array<{
 ];
 
 function BrandButton({ onClick, compact = false }: { onClick: () => void; compact?: boolean }) {
+  const { t } = useI18n();
   return (
     <button
       type="button"
       onClick={onClick}
       className={`group flex items-center ${compact ? 'gap-2' : 'flex-col gap-3'} text-left`}
-      aria-label="返回知行造境作品展厅"
+      aria-label={t('返回知行造境作品展厅')}
     >
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] border border-studio-brass/60 bg-studio-brass text-lg font-semibold text-studio-canvas transition-colors duration-200 group-hover:bg-[#c3aa76]">
         知
@@ -41,12 +44,13 @@ function BrandButton({ onClick, compact = false }: { onClick: () => void; compac
 }
 
 export default function Sidebar({ activeTab, onNavigate, accountLabel }: SidebarProps) {
+  const { t } = useI18n();
   const items = [
-    ...BASE_ITEMS,
+    ...BASE_ITEMS.map((item) => ({ ...item, label: t(item.label), title: t(item.title) })),
     {
       id: 'account' as const,
       label: accountLabel,
-      title: accountLabel === '我的项目' ? '客户项目中心' : '客户登录',
+      title: accountLabel === t('我的项目') ? t('客户项目中心') : t('客户登录'),
       icon: UserRound,
     },
   ];
@@ -54,7 +58,7 @@ export default function Sidebar({ activeTab, onNavigate, accountLabel }: Sidebar
     <>
       <aside className="fixed inset-y-0 left-0 z-50 hidden w-28 flex-col items-center border-r border-studio-line bg-studio-surface px-3 py-6 lg:flex">
         <BrandButton onClick={() => onNavigate('gallery')} />
-        <nav className="my-auto flex w-full flex-col gap-2" aria-label="主要导航">
+        <nav className="my-auto flex w-full flex-col gap-2" aria-label={t('主要导航')}>
           {items.map(({ id, label, title, icon: Icon }) => {
             const active = activeTab === id;
             return (
@@ -72,23 +76,27 @@ export default function Sidebar({ activeTab, onNavigate, accountLabel }: Sidebar
             );
           })}
         </nav>
-        <p className="text-center text-[9px] leading-4 text-studio-faint">
-          微缩建筑
+        <LanguageSwitcher />
+        <p className="mt-3 text-center text-[9px] leading-4 text-studio-faint">
+          {t('微缩建筑')}
           <br />
-          与场景制作
+          {t('与场景制作')}
         </p>
       </aside>
 
       <header className="fixed inset-x-0 top-0 z-50 flex h-14 items-center justify-between border-b border-studio-line bg-studio-surface px-4 lg:hidden">
         <BrandButton compact onClick={() => onNavigate('gallery')} />
-        <span className="text-[10px] text-studio-faint">
-          {items.find((item) => item.id === activeTab)?.title}
-        </span>
+        <div className="flex items-center gap-2">
+          <LanguageSwitcher />
+          <span className="hidden text-[10px] text-studio-faint sm:inline">
+            {items.find((item) => item.id === activeTab)?.title}
+          </span>
+        </div>
       </header>
 
       <nav
         className="fixed inset-x-0 bottom-0 z-50 grid h-[4.5rem] grid-cols-4 border-t border-studio-line bg-studio-surface px-2 pb-[env(safe-area-inset-bottom)] lg:hidden"
-        aria-label="移动端主要导航"
+        aria-label={t('移动端主要导航')}
       >
         {items.map(({ id, label, title, icon: Icon }) => {
           const active = activeTab === id;

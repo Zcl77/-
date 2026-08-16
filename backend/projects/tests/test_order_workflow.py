@@ -140,7 +140,7 @@ class OrderWorkflowTests(TransactionTestCase):
         )
         premature_final = client.post(payment_url, {"payment_type": "final"}, format="json")
         self.assertEqual(premature_final.status_code, 400)
-        self.assertEqual(premature_final.json()["error"]["code"], "invalid")
+        self.assertEqual(premature_final.json()["error"]["code"], "invalid_payment_state")
         self.assertIn("尾款待支付", premature_final.json()["error"]["message"])
         self.assertFalse(order.payment_records.exists())
 
@@ -284,7 +284,8 @@ class OrderWorkflowTests(TransactionTestCase):
         serialized = client.get("/api/v1/me/orders").json()["results"][0]
         self.assertNotIn("mock_pay_final", serialized["available_actions"])
 
-    def test_only_supported_cny_currency_is_accepted(self):
+    @override_settings(MOCK_PAYMENTS_ENABLED=True)
+    def test_usd_is_structurally_supported_but_mock_payment_remains_cny_only(self):
         order = Order(
             order_number="QUOTE-USD-REJECTED",
             customer=self.profile_a,
@@ -293,9 +294,38 @@ class OrderWorkflowTests(TransactionTestCase):
             agreed_amount=Decimal("100.00"),
             currency="USD",
         )
-        with self.assertRaises(ValidationError) as caught:
+        order.full_clean()
+        order.save()
+        self.mark_mock_payment_eligible(order, self.customer_a, self.profile_a)
+        client = APIClient()
+        client.force_login(self.customer_a)
+        accepted = client.post(
+            f"/api/v1/me/orders/{order.pk}/quote-decision",
+            {"decision": "accepted"},
+            format="json",
+        )
+        self.assertEqual(accepted.status_code, 200)
+        self.assertEqual(accepted.json()["order"]["currency"], "USD")
+        self.assertNotIn("mock_pay_final", accepted.json()["order"]["available_actions"])
+        payment = client.post(
+            f"/api/v1/me/orders/{order.pk}/mock-payment",
+            {"payment_type": "final"},
+            format="json",
+        )
+        self.assertEqual(payment.status_code, 400)
+        self.assertEqual(payment.json()["error"]["code"], "mock_currency_unsupported")
+
+    def test_currency_codes_are_limited_to_declared_iso_4217_choices(self):
+        order = Order(
+            order_number="QUOTE-EUR-REJECTED",
+            customer=self.profile_a,
+            order_type="模型制作",
+            currency="EUR",
+        )
+        with self.assertRaises(ValidationError):
             order.full_clean()
-        self.assertIn("currency", caught.exception.message_dict)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Order.objects.bulk_create([order])
 
     def test_requoting_replaces_the_old_decision_and_timestamp(self):
         order = self.proposed_order(self.profile_a, "QUOTE-REVISED")

@@ -2,16 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowRight, BriefcaseBusiness, Check, LogOut, RefreshCw, Settings2, X } from 'lucide-react';
 import { decideQuote, getMyOrders, getMyProjects, mockPayOrder } from '../../services/api/repositories';
 import { LatestRequestGate, useVisiblePolling } from '../../hooks/useVisiblePolling';
-import {
-  formatCnyAmount as formatAmount,
-  getOrderUiActions,
-  paymentPartStatus,
-  replaceOrder,
-} from '../../domain/orderPayment';
+import { getOrderUiActions, replaceOrder } from '../../domain/orderPayment';
 import { AuthenticatedUser, CustomerOrder, CustomerProject } from '../../types';
 import StatusNotice from '../ui/StatusNotice';
 import CustomerProjectDetail from './CustomerProjectDetail';
 import PasswordChangePanel from './PasswordChangePanel';
+import { useI18n } from '../../i18n';
 
 interface CustomerPortalProps {
   user: AuthenticatedUser;
@@ -61,15 +57,6 @@ const PAYMENT_TYPE: Record<CustomerOrder['paymentRecords'][number]['paymentType'
   refund: '退款',
 };
 
-function dateTime(value: string) {
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value));
-}
-
 export default function CustomerPortal({
   user,
   selectedProjectId,
@@ -78,6 +65,19 @@ export default function CustomerPortal({
   onLogout,
   onChangePassword,
 }: CustomerPortalProps) {
+  const { t, formatDate, formatMoney, errorMessage } = useI18n();
+  const dateTime = (value: string) =>
+    formatDate(value, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const paymentPartStatus = (value: CustomerOrder['depositStatus']) =>
+    t(
+      value === 'recorded'
+        ? '已确认'
+        : value === 'waived'
+          ? '无需收取'
+          : value === 'pending'
+            ? '待支付'
+            : '未记录',
+    );
   const [projects, setProjects] = useState<CustomerProject[]>([]);
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -117,7 +117,7 @@ export default function CustomerPortal({
         setSyncError(null);
       } catch (reason) {
         if (!isLatest()) return;
-        const message = reason instanceof Error ? reason.message : '项目列表加载失败。';
+        const message = errorMessage(reason, '项目列表加载失败。');
         if (background) setSyncError(message);
         else {
           setError(message);
@@ -126,7 +126,7 @@ export default function CustomerPortal({
         throw reason;
       }
     },
-    [user.isStaff, user.mustChangePassword],
+    [errorMessage, user.isStaff, user.mustChangePassword],
   );
 
   useEffect(() => {
@@ -148,12 +148,15 @@ export default function CustomerPortal({
     try {
       const result = await decideQuote(orderId, decision);
       setOrders((current) => replaceOrder(current, result.order));
-      setQuoteMessage({ tone: 'success', text: result.message });
+      setQuoteMessage({
+        tone: 'success',
+        text: t(result.changed ? '报价决定已记录。' : '该报价决定已经记录，无需重复提交。'),
+      });
       await load(true).catch(() => undefined);
     } catch (reason) {
       setQuoteMessage({
         tone: 'error',
-        text: reason instanceof Error ? reason.message : '报价决定未能提交。',
+        text: errorMessage(reason, '报价决定未能提交。'),
       });
     } finally {
       quoteSubmitting.current = false;
@@ -169,12 +172,17 @@ export default function CustomerPortal({
     try {
       const result = await mockPayOrder(orderId, type);
       setOrders((current) => replaceOrder(current, result.order));
-      setPaymentMessage({ tone: 'success', text: result.message });
+      setPaymentMessage({
+        tone: 'success',
+        text: t(
+          result.created ? '本地模拟付款已记录；该记录不代表真实收款。' : '该模拟付款已记录，无需重复提交。',
+        ),
+      });
       await load(true).catch(() => undefined);
     } catch (reason) {
       setPaymentMessage({
         tone: 'error',
-        text: reason instanceof Error ? reason.message : '本地模拟付款未能完成。',
+        text: errorMessage(reason, '本地模拟付款未能完成。'),
       });
     } finally {
       paymentSubmitting.current = false;
@@ -189,7 +197,7 @@ export default function CustomerPortal({
     try {
       await onLogout();
     } catch (reason) {
-      setLogoutError(reason instanceof Error ? reason.message : '退出登录失败，请重试。');
+      setLogoutError(errorMessage(reason, '退出登录失败，请重试。'));
     } finally {
       setLoggingOut(false);
     }
@@ -200,11 +208,11 @@ export default function CustomerPortal({
       <div className="page-inner">
         <div className="mb-8 flex flex-col justify-between gap-4 border-b border-studio-line pb-5 sm:flex-row sm:items-center">
           <div>
-            <span className="page-kicker">Signed in</span>
+            <span className="page-kicker">{t('已登录')}</span>
             <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-studio-ink">
               {user.displayName}
               {user.isDevData && (
-                <span className="tag border-studio-warning/50 text-studio-warning">本地开发账号</span>
+                <span className="tag border-studio-warning/50 text-studio-warning">{t('本地开发账号')}</span>
               )}
             </p>
           </div>
@@ -215,11 +223,17 @@ export default function CustomerPortal({
             className="button-secondary self-start sm:self-auto"
           >
             <LogOut className="h-4 w-4" />
-            {loggingOut ? '正在退出' : '退出登录'}
+            {t(loggingOut ? '正在退出' : '退出登录')}
           </button>
         </div>
         {logoutError && (
-          <StatusNotice tone="error" compact title="退出未完成" description={logoutError} className="mb-6" />
+          <StatusNotice
+            tone="error"
+            compact
+            title={t('退出未完成')}
+            description={logoutError}
+            className="mb-6"
+          />
         )}
 
         {user.mustChangePassword ? (
@@ -227,13 +241,13 @@ export default function CustomerPortal({
         ) : user.isStaff ? (
           <section className="mx-auto max-w-xl border-y border-studio-line py-10 text-center">
             <Settings2 className="mx-auto h-6 w-6 text-studio-brass" aria-hidden="true" />
-            <h1 className="mt-4 font-serif text-2xl font-semibold text-studio-ink">工作室管理账号</h1>
+            <h1 className="mt-4 font-serif text-2xl font-semibold text-studio-ink">{t('工作室管理账号')}</h1>
             <p className="mt-3 text-sm leading-7 text-studio-muted">
-              第一版内容、客户、订单、进度和审核统一在 Django 管理后台处理。
+              {t('第一版内容、客户、订单、进度和审核统一在 Django 管理后台处理。')}
             </p>
             <a href="/admin/" className="button-primary mt-6">
               <Settings2 className="h-4 w-4" />
-              进入管理后台
+              {t('进入管理后台')}
             </a>
           </section>
         ) : selectedProjectId ? (
@@ -241,10 +255,10 @@ export default function CustomerPortal({
         ) : (
           <>
             <header className="border-b border-studio-line pb-7">
-              <span className="page-kicker">My projects</span>
-              <h1 className="page-title mt-2">我的项目</h1>
+              <span className="page-kicker">{t('我的项目')}</span>
+              <h1 className="page-title mt-2">{t('我的项目')}</h1>
               <p className="page-description mt-3">
-                查看真实制作阶段、最近更新、下一步计划和需要您确认的内容。
+                {t('查看真实制作阶段、最近更新、下一步计划和需要您确认的内容。')}
               </p>
             </header>
 
@@ -252,12 +266,12 @@ export default function CustomerPortal({
               <StatusNotice
                 tone="error"
                 compact
-                title="自动同步暂时中断"
-                description={`${syncError} 页面会自动退避重试，您也可以立即重试。`}
+                title={t('自动同步暂时中断')}
+                description={`${syncError} ${t('页面会自动退避重试，您也可以立即重试。')}`}
                 action={
                   <button type="button" onClick={() => void load(true)} className="button-secondary">
                     <RefreshCw className="h-4 w-4" />
-                    立即重试
+                    {t('立即重试')}
                   </button>
                 }
                 className="mt-7"
@@ -267,15 +281,15 @@ export default function CustomerPortal({
             {status === 'loading' && (
               <StatusNotice
                 tone="loading"
-                title="正在读取我的项目"
-                description="正在核对当前账号与项目成员关系。"
+                title={t('正在读取我的项目')}
+                description={t('正在核对当前账号与项目成员关系。')}
                 className="mt-7"
               />
             )}
             {status === 'error' && (
               <StatusNotice
                 tone="error"
-                title="项目列表加载失败"
+                title={t('项目列表加载失败')}
                 description={error || undefined}
                 action={
                   <button
@@ -284,7 +298,7 @@ export default function CustomerPortal({
                     className="button-secondary"
                   >
                     <RefreshCw className="h-4 w-4" />
-                    重试
+                    {t('重试')}
                   </button>
                 }
                 className="mt-7"
@@ -294,24 +308,24 @@ export default function CustomerPortal({
               <section className="mt-7" aria-labelledby="customer-orders-title">
                 <div className="flex items-end justify-between gap-4 border-b border-studio-line pb-3">
                   <div>
-                    <span className="page-kicker">Quotes and orders</span>
+                    <span className="page-kicker">{t('报价与订单')}</span>
                     <h2 id="customer-orders-title" className="section-heading mt-2">
-                      报价与订单
+                      {t('报价与订单')}
                     </h2>
                   </div>
                   <span className="text-[10px] text-studio-warning">
                     {orders.some((order) =>
                       order.availableActions.some((action) => action.startsWith('mock_pay_')),
                     )
-                      ? '仅限本地测试 / 模拟支付'
-                      : '付款记录'}
+                      ? t('仅限本地测试 / 模拟支付')
+                      : t('付款记录')}
                   </span>
                 </div>
                 {quoteMessage && (
                   <StatusNotice
                     tone={quoteMessage.tone}
                     compact
-                    title="报价状态"
+                    title={t('报价状态')}
                     description={quoteMessage.text}
                     className="mt-4"
                   />
@@ -320,7 +334,7 @@ export default function CustomerPortal({
                   <StatusNotice
                     tone={paymentMessage.tone}
                     compact
-                    title="本地模拟付款"
+                    title={t('本地模拟付款')}
                     description={paymentMessage.text}
                     className="mt-4"
                   />
@@ -339,41 +353,52 @@ export default function CustomerPortal({
                       >
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <span className="tag">{ORDER_STATUS[order.confirmationStatus]}</span>
+                            <span className="tag">{t(ORDER_STATUS[order.confirmationStatus])}</span>
                             <h3 className="mt-3 font-serif text-lg font-semibold text-studio-ink">
                               {order.orderType}
                             </h3>
-                            <p className="mt-1 text-xs text-studio-faint">订单 {order.orderNumber}</p>
+                            <p className="mt-1 text-xs text-studio-faint">
+                              {t('订单编号')} {order.orderNumber}
+                            </p>
                           </div>
                           <div className="text-right">
-                            <span className="block text-[10px] text-studio-faint">订单总额</span>
+                            <span className="block text-[10px] text-studio-faint">{t('订单总额')}</span>
                             <strong className="mt-1 block font-serif text-xl text-studio-ink">
-                              {formatAmount(order.agreedAmount)}
+                              {formatMoney(order.agreedAmount, order.currency)}
                             </strong>
                           </div>
                         </div>
                         <dl className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-[4px] bg-studio-line text-xs">
-                          <OrderState label="报价决定" value={QUOTE_DECISION[order.quoteDecision]} />
-                          <OrderState label="币种" value={order.currency} />
-                          <OrderState label="付款状态" value={PAYMENT_STATUS[order.paymentStatus]} />
-                          <OrderState label="定金金额" value={formatAmount(order.depositAmount)} />
-                          <OrderState label="定金状态" value={paymentPartStatus(order.depositStatus)} />
-                          <OrderState label="尾款金额" value={formatAmount(order.finalAmount)} />
-                          <OrderState label="尾款状态" value={paymentPartStatus(order.finalPaymentStatus)} />
+                          <OrderState label={t('报价决定')} value={t(QUOTE_DECISION[order.quoteDecision])} />
+                          <OrderState label={t('币种')} value={order.currency} />
+                          <OrderState label={t('付款状态')} value={t(PAYMENT_STATUS[order.paymentStatus])} />
                           <OrderState
-                            label="交付"
+                            label={t('定金金额')}
+                            value={formatMoney(order.depositAmount, order.currency)}
+                          />
+                          <OrderState label={t('定金状态')} value={paymentPartStatus(order.depositStatus)} />
+                          <OrderState
+                            label={t('尾款金额')}
+                            value={formatMoney(order.finalAmount, order.currency)}
+                          />
+                          <OrderState
+                            label={t('尾款状态')}
+                            value={paymentPartStatus(order.finalPaymentStatus)}
+                          />
+                          <OrderState
+                            label={t('交付')}
                             value={
                               order.deliveryStatus === 'delivered'
-                                ? '已交付'
+                                ? t('已交付')
                                 : order.deliveryStatus === 'ready'
-                                  ? '待交付'
-                                  : '未交付'
+                                  ? t('待交付')
+                                  : t('未交付')
                             }
                           />
                         </dl>
                         {order.quoteValidUntil && (
                           <p className="mt-3 text-xs text-studio-faint">
-                            报价有效期至 {dateTime(order.quoteValidUntil)}
+                            {t('报价有效期')} {dateTime(order.quoteValidUntil)}
                           </p>
                         )}
                         {canDecide && (
@@ -385,7 +410,7 @@ export default function CustomerPortal({
                               className="button-primary"
                             >
                               <Check className="h-4 w-4" />
-                              {deciding && quoteAction?.decision === 'accepted' ? '正在接受' : '接受报价'}
+                              {t(deciding && quoteAction?.decision === 'accepted' ? '正在接受' : '接受报价')}
                             </button>
                             <button
                               type="button"
@@ -394,14 +419,14 @@ export default function CustomerPortal({
                               className="button-secondary"
                             >
                               <X className="h-4 w-4" />
-                              {deciding && quoteAction?.decision === 'rejected' ? '正在拒绝' : '拒绝报价'}
+                              {t(deciding && quoteAction?.decision === 'rejected' ? '正在拒绝' : '拒绝报价')}
                             </button>
                           </div>
                         )}
                         {(canPayDeposit || canPayFinal) && (
                           <div className="mt-4 border-t border-studio-line pt-4">
                             <p className="mb-3 text-xs leading-6 text-studio-warning">
-                              本地测试功能：不会发起真实扣款，也不连接任何支付渠道。
+                              {t('本地测试功能：不会发起真实扣款，也不连接任何支付渠道。')}
                             </p>
                             <button
                               type="button"
@@ -411,27 +436,27 @@ export default function CustomerPortal({
                               }
                               className="button-secondary w-full"
                             >
-                              {paying
-                                ? '正在记录模拟付款'
-                                : canPayDeposit
-                                  ? '本地测试 / 模拟支付定金'
-                                  : '本地测试 / 模拟支付尾款'}
+                              {t(
+                                paying
+                                  ? '正在记录模拟付款'
+                                  : canPayDeposit
+                                    ? '本地测试 / 模拟支付定金'
+                                    : '本地测试 / 模拟支付尾款',
+                              )}
                             </button>
                           </div>
                         )}
                         {order.paymentRecords.length > 0 && (
                           <div className="mt-4 border-t border-studio-line pt-4">
-                            <h4 className="text-xs font-semibold text-studio-ink">付款记录摘要</h4>
+                            <h4 className="text-xs font-semibold text-studio-ink">{t('付款记录摘要')}</h4>
                             <ul className="mt-2 space-y-2 text-xs text-studio-muted">
                               {order.paymentRecords.slice(0, 3).map((payment) => (
                                 <li key={payment.id} className="flex items-center justify-between gap-3">
                                   <span>
-                                    {PAYMENT_TYPE[payment.paymentType]} · 本地模拟 ·{' '}
-                                    {payment.status === 'succeeded' ? '成功' : payment.status}
+                                    {t(PAYMENT_TYPE[payment.paymentType])} · {t('本地模拟')} ·{' '}
+                                    {payment.status === 'succeeded' ? t('成功') : payment.status}
                                   </span>
-                                  <span>
-                                    {formatAmount(payment.amount)} {payment.currency}
-                                  </span>
+                                  <span>{formatMoney(payment.amount, payment.currency)}</span>
                                 </li>
                               ))}
                             </ul>
@@ -446,8 +471,8 @@ export default function CustomerPortal({
             {status === 'ready' && projects.length === 0 && (
               <StatusNotice
                 tone="empty"
-                title="当前账号尚未绑定项目"
-                description="请联系工作室核对账号或项目成员信息。"
+                title={t('当前账号尚未绑定项目')}
+                description={t('请联系工作室核对账号或项目成员信息。')}
                 className="mt-7"
               />
             )}
@@ -460,19 +485,19 @@ export default function CustomerPortal({
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
-                        <span className="tag">{PROJECT_STATUS[project.status]}</span>
+                        <span className="tag">{t(PROJECT_STATUS[project.status])}</span>
                         <h2 className="mt-3 font-serif text-xl font-semibold text-studio-ink">
                           {project.name}
                         </h2>
                       </div>
                       {project.unreadUpdateCount > 0 && (
                         <span className="tag shrink-0 border-studio-warning/50 text-studio-warning">
-                          {project.unreadUpdateCount} 条未读
+                          {project.unreadUpdateCount} {t('条未读')}
                         </span>
                       )}
                     </div>
                     <div className="mt-5 flex items-center justify-between text-xs text-studio-muted">
-                      <span>{project.currentStage?.name || '阶段待设置'}</span>
+                      <span>{project.currentStage?.name || t('阶段待设置')}</span>
                       <strong className="text-studio-ink">{project.completionPercent}%</strong>
                     </div>
                     <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-studio-line">
@@ -483,13 +508,13 @@ export default function CustomerPortal({
                     </div>
                     <dl className="mt-5 grid grid-cols-1 gap-3 border-y border-studio-line py-4 text-xs sm:grid-cols-2">
                       <div>
-                        <dt className="text-studio-faint">最近进度</dt>
+                        <dt className="text-studio-faint">{t('最近进度')}</dt>
                         <dd className="mt-1 leading-6 text-studio-ink">
-                          {project.latestUpdate?.title || '尚未发布'}
+                          {project.latestUpdate?.title || t('尚未发布')}
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-studio-faint">更新时间</dt>
+                        <dt className="text-studio-faint">{t('更新时间')}</dt>
                         <dd className="mt-1 leading-6 text-studio-ink">{dateTime(project.updatedAt)}</dd>
                       </div>
                     </dl>
@@ -499,7 +524,7 @@ export default function CustomerPortal({
                       className="button-secondary mt-5 w-full"
                     >
                       <BriefcaseBusiness className="h-4 w-4" />
-                      查看项目详情
+                      {t('查看项目详情')}
                       <ArrowRight className="ml-auto h-4 w-4" />
                     </button>
                   </article>

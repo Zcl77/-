@@ -6,8 +6,10 @@ import {
   logout as requestLogout,
 } from '../services/api/repositories';
 import { CurrentUser } from '../types';
+import { useI18n } from '../i18n';
 
 export function useSessionAuth() {
+  const { t, errorMessage } = useI18n();
   const [user, setUser] = useState<CurrentUser>({ authenticated: false });
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -20,21 +22,21 @@ export function useSessionAuth() {
       setStatus('ready');
     } catch (reason) {
       setUser({ authenticated: false });
-      setError(reason instanceof Error ? reason.message : '登录状态检查失败。');
+      setError(errorMessage(reason, '登录状态检查失败。'));
       setStatus('error');
     }
-  }, []);
+  }, [errorMessage]);
 
   useEffect(() => {
     void refresh();
     const expire = () => {
       setUser({ authenticated: false });
       setStatus('ready');
-      setError('登录状态已过期，请重新登录。');
+      setError(t('登录状态已过期，请重新登录。'));
     };
     window.addEventListener('zhixing:session-expired', expire);
     return () => window.removeEventListener('zhixing:session-expired', expire);
-  }, [refresh]);
+  }, [refresh, t]);
 
   const login = useCallback(async (username: string, password: string) => {
     const result = await requestLogin(username, password);

@@ -43,6 +43,12 @@ from .services import decide_quote, record_mock_payment
 PRIVATE_PERMISSIONS = [IsAuthenticated, HasCompletedPasswordChange, IsCustomerOrStaff]
 
 
+def api_validation_error(exc):
+    code = getattr(exc, "code", None) or "invalid"
+    detail = exc.message_dict if hasattr(exc, "error_dict") else exc.messages
+    return ApiValidationError(detail, code=code)
+
+
 def accessible_projects(user):
     queryset = ClientProject.objects.all()
     if user.is_staff:
@@ -124,7 +130,7 @@ class QuoteDecisionView(APIView):
             from django.core.exceptions import ValidationError as DjangoValidationError
 
             if isinstance(exc, DjangoValidationError):
-                raise ApiValidationError(exc.messages) from exc
+                raise api_validation_error(exc) from exc
             raise
         return Response(
             {
@@ -158,7 +164,7 @@ class MockPaymentView(APIView):
             from django.core.exceptions import ValidationError as DjangoValidationError
 
             if isinstance(exc, DjangoValidationError):
-                raise ApiValidationError(exc.messages) from exc
+                raise api_validation_error(exc) from exc
             raise
         return Response(
             {

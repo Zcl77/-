@@ -125,7 +125,7 @@ interface RawPaymentRecord {
   payment_type: CustomerOrder['paymentRecords'][number]['paymentType'];
   channel: 'mock';
   amount: string;
-  currency: 'CNY';
+  currency: 'CNY' | 'USD';
   status: CustomerOrder['paymentRecords'][number]['status'];
   mock_transaction_id: string | null;
   paid_at: string | null;

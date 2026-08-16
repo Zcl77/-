@@ -3,6 +3,7 @@ import { FileImage, MessageSquareText, Send, Star } from 'lucide-react';
 import { REVIEW_LIMITS, validateImageFile, validateReviewInput } from '../domain/validation';
 import { InquiryInput, Project, Review, ReviewInput, SiteInfo } from '../types';
 import StatusNotice from './ui/StatusNotice';
+import { useI18n } from '../i18n';
 
 interface CommissionFormProps {
   onAddReview: (review: ReviewInput) => Promise<string>;
@@ -31,6 +32,7 @@ export default function CommissionForm({
   reviews,
   site,
 }: CommissionFormProps) {
+  const { t, errorMessage } = useI18n();
   const [inquiry, setInquiry] = useState(EMPTY_INQUIRY);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [inquiryState, setInquiryState] = useState<'idle' | 'working' | 'success' | 'error'>('idle');
@@ -57,20 +59,20 @@ export default function CommissionForm({
     const invalidAttachment = attachments.map(validateImageFile).find(Boolean);
     if (invalidAttachment) {
       setInquiryState('error');
-      setInquiryMessage(invalidAttachment);
+      setInquiryMessage(t(invalidAttachment));
       return;
     }
     setInquiryState('working');
     setInquiryMessage('');
     inquirySubmitting.current = true;
     try {
-      const message = await onSubmitInquiry({ ...inquiry, attachments });
+      await onSubmitInquiry({ ...inquiry, attachments });
       setInquiry(EMPTY_INQUIRY);
       setAttachments([]);
       setInquiryState('success');
-      setInquiryMessage(message);
+      setInquiryMessage(t('工作室会按您留下的方式联系；第一版不会自动发送短信或微信消息。'));
     } catch (reason) {
-      setInquiryMessage(reason instanceof Error ? reason.message : '询价提交失败，请稍后重试。');
+      setInquiryMessage(errorMessage(reason, '询价提交失败，请稍后重试。'));
       setInquiryState('error');
     } finally {
       inquirySubmitting.current = false;
@@ -81,14 +83,14 @@ export default function CommissionForm({
     if (files.length > 5) {
       setAttachments([]);
       setInquiryState('error');
-      setInquiryMessage('参考图片最多选择 5 张。');
+      setInquiryMessage(t('参考图片最多选择 5 张。'));
       return;
     }
     const invalidAttachment = files.map(validateImageFile).find(Boolean);
     if (invalidAttachment) {
       setAttachments([]);
       setInquiryState('error');
-      setInquiryMessage(invalidAttachment);
+      setInquiryMessage(t(invalidAttachment));
       return;
     }
     setAttachments(files);
@@ -105,29 +107,29 @@ export default function CommissionForm({
     const input = {
       reviewerName: reviewerName.trim(),
       rating,
-      projectName: selectedProject?.title || '工作室总体评价',
+      projectName: selectedProject?.title || t('工作室总体评价'),
       comment: comment.trim(),
       workSlug: selectedProject?.slug,
     };
     const errors = validateReviewInput(input);
     if (errors.length > 0) {
       setReviewState('error');
-      setReviewMessage(errors[0]);
+      setReviewMessage(t(errors[0]));
       return;
     }
     setReviewState('working');
     setReviewMessage('');
     reviewSubmitting.current = true;
     try {
-      const message = await onAddReview(input);
+      await onAddReview(input);
       setReviewerName('');
       setRating(5);
       setReviewTarget('studio');
       setComment('');
       setReviewState('success');
-      setReviewMessage(message);
+      setReviewMessage(t('审核通过后才会出现在公开列表。'));
     } catch (reason) {
-      setReviewMessage(reason instanceof Error ? reason.message : '评价提交失败，请稍后重试。');
+      setReviewMessage(errorMessage(reason, '评价提交失败，请稍后重试。'));
       setReviewState('error');
     } finally {
       reviewSubmitting.current = false;
@@ -139,10 +141,10 @@ export default function CommissionForm({
       ? (reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length).toFixed(1)
       : '—';
   const contacts = [
-    ['联系人', site.contactName],
-    ['微信', site.wechat],
-    ['电话', site.phone],
-    ['邮箱', site.email],
+    [t('联系人'), site.contactName],
+    [t('微信'), site.wechat],
+    [t('电话'), site.phone],
+    [t('邮箱'), site.email],
   ].filter((item): item is [string, string] => Boolean(item[1]));
 
   return (
@@ -150,25 +152,25 @@ export default function CommissionForm({
       <div className="page-inner">
         <header className="flex flex-col justify-between gap-6 border-b border-studio-line pb-7 md:flex-row md:items-end">
           <div>
-            <span className="page-kicker">Inquiry and reviews</span>
-            <h1 className="page-title mt-2">询价与评价</h1>
+            <span className="page-kicker">{t('询价与评价')}</span>
+            <h1 className="page-title mt-2">{t('询价与评价')}</h1>
             <p className="page-description mt-3">
-              提交制作需求，或分享真实合作体验。评价审核通过后才会公开。
+              {t('提交制作需求，或分享真实合作体验。评价审核通过后才会公开。')}
             </p>
           </div>
           <dl className="grid w-full max-w-sm grid-cols-2 border-y border-studio-line md:w-auto md:min-w-72">
             <div className="border-r border-studio-line py-3 pr-5">
-              <dt className="text-[10px] uppercase text-studio-faint">平均评分</dt>
+              <dt className="text-[10px] uppercase text-studio-faint">{t('平均评分')}</dt>
               <dd className="mt-1 font-serif text-2xl text-studio-ink">
                 {averageRating}
                 <span className="ml-1 text-xs text-studio-muted">/ 5</span>
               </dd>
             </div>
             <div className="py-3 pl-5">
-              <dt className="text-[10px] uppercase text-studio-faint">公开评价</dt>
+              <dt className="text-[10px] uppercase text-studio-faint">{t('公开评价')}</dt>
               <dd className="mt-1 font-serif text-2xl text-studio-ink">
                 {reviews.length}
-                <span className="ml-1 text-xs text-studio-muted">条</span>
+                <span className="ml-1 text-xs text-studio-muted">{t('条')}</span>
               </dd>
             </div>
           </dl>
@@ -177,12 +179,12 @@ export default function CommissionForm({
         <div className="mt-8 grid grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-10 xl:gap-14">
           <div className="lg:col-span-6">
             <section className="border-b border-studio-line pb-7" aria-labelledby="contact-title">
-              <span className="page-kicker">Studio contact</span>
+              <span className="page-kicker">{t('工作室联系信息')}</span>
               <h2 id="contact-title" className="section-heading mt-2">
-                联系工作室
+                {t('联系工作室')}
               </h2>
               <p className="mt-3 max-w-xl text-sm leading-7 text-studio-muted">
-                {site.description || '可通过下方询价表说明模型类型、比例、预算和期望交付时间。'}
+                {site.description || t('可通过下方询价表说明模型类型、比例、预算和期望交付时间。')}
               </p>
               {contacts.length > 0 && (
                 <dl className="mt-5 grid grid-cols-1 gap-px overflow-hidden rounded-[6px] border border-studio-line bg-studio-line sm:grid-cols-2">
@@ -194,15 +196,15 @@ export default function CommissionForm({
             </section>
 
             <section className="mt-8 ui-panel p-5 md:p-6" aria-labelledby="inquiry-title">
-              <span className="page-kicker">Project inquiry</span>
+              <span className="page-kicker">{t('项目询价')}</span>
               <h2 id="inquiry-title" className="section-heading mt-2">
-                提交制作需求
+                {t('提交制作需求')}
               </h2>
               {inquiryState === 'error' && (
                 <StatusNotice
                   tone="error"
                   compact
-                  title="询价未提交"
+                  title={t('询价未提交')}
                   description={inquiryMessage}
                   className="mt-5"
                 />
@@ -211,16 +213,16 @@ export default function CommissionForm({
                 <StatusNotice
                   tone="success"
                   compact
-                  title="询价已提交"
+                  title={t('询价已提交')}
                   description={
-                    inquiryMessage || '工作室会按您留下的方式联系；第一版不会自动发送短信或微信消息。'
+                    inquiryMessage || t('工作室会按您留下的方式联系；第一版不会自动发送短信或微信消息。')
                   }
                   className="mt-5"
                 />
               )}
               <form onSubmit={submitInquiryForm} className="mt-6 space-y-5">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <Field label="姓名 *" id="inquiry-name">
+                  <Field label={t('姓名 *')} id="inquiry-name">
                     <input
                       id="inquiry-name"
                       required
@@ -230,7 +232,7 @@ export default function CommissionForm({
                       className="field-input"
                     />
                   </Field>
-                  <Field label="项目类型 *" id="inquiry-type">
+                  <Field label={t('项目类型 *')} id="inquiry-type">
                     <input
                       id="inquiry-type"
                       required
@@ -238,12 +240,12 @@ export default function CommissionForm({
                       value={inquiry.projectType}
                       onChange={(event) => setInquiryField('projectType', event.target.value)}
                       className="field-input"
-                      placeholder="例如：建筑微缩模型"
+                      placeholder={t('例如：建筑微缩模型')}
                     />
                   </Field>
                 </div>
                 <div className="grid grid-cols-[8rem_1fr] gap-3">
-                  <Field label="联系方式" id="contact-type">
+                  <Field label={t('联系方式')} id="contact-type">
                     <select
                       id="contact-type"
                       value={inquiry.contactType}
@@ -252,11 +254,11 @@ export default function CommissionForm({
                       }
                       className="field-input"
                     >
-                      <option value="wechat">微信</option>
-                      <option value="phone">手机号</option>
+                      <option value="wechat">{t('微信')}</option>
+                      <option value="phone">{t('手机号')}</option>
                     </select>
                   </Field>
-                  <Field label="号码或微信号 *" id="contact-value">
+                  <Field label={t('号码或微信号 *')} id="contact-value">
                     <input
                       id="contact-value"
                       required
@@ -268,17 +270,17 @@ export default function CommissionForm({
                   </Field>
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <Field label="模型比例" id="inquiry-scale">
+                  <Field label={t('模型比例')} id="inquiry-scale">
                     <input
                       id="inquiry-scale"
                       maxLength={40}
                       value={inquiry.scale}
                       onChange={(event) => setInquiryField('scale', event.target.value)}
                       className="field-input"
-                      placeholder="例如 1:50"
+                      placeholder={t('例如 1:50')}
                     />
                   </Field>
-                  <Field label="预算范围" id="inquiry-budget">
+                  <Field label={t('预算范围')} id="inquiry-budget">
                     <input
                       id="inquiry-budget"
                       maxLength={80}
@@ -287,7 +289,7 @@ export default function CommissionForm({
                       className="field-input"
                     />
                   </Field>
-                  <Field label="期望交付" id="inquiry-date">
+                  <Field label={t('期望交付')} id="inquiry-date">
                     <input
                       id="inquiry-date"
                       type="date"
@@ -297,7 +299,7 @@ export default function CommissionForm({
                     />
                   </Field>
                 </div>
-                <Field label="需求说明 *" id="inquiry-description">
+                <Field label={t('需求说明 *')} id="inquiry-description">
                   <textarea
                     id="inquiry-description"
                     required
@@ -306,16 +308,16 @@ export default function CommissionForm({
                     value={inquiry.description}
                     onChange={(event) => setInquiryField('description', event.target.value)}
                     className="field-input resize-y"
-                    placeholder="请说明尺寸、场景、用途、材料偏好和时间要求。"
+                    placeholder={t('请说明尺寸、场景、用途、材料偏好和时间要求。')}
                   />
                 </Field>
                 <div>
                   <label htmlFor="inquiry-files" className="field-label">
-                    参考图片（最多 5 张，每张不超过 15 MB）
+                    {t('参考图片（最多 5 张，每张不超过 15 MB）')}
                   </label>
                   <label htmlFor="inquiry-files" className="button-secondary cursor-pointer">
                     <FileImage className="h-4 w-4" />
-                    选择图片
+                    {t('选择图片')}
                   </label>
                   <input
                     id="inquiry-files"
@@ -340,13 +342,13 @@ export default function CommissionForm({
                     required
                   />
                   <span>
-                    我同意工作室仅为处理本次询价使用所提交的联系方式和参考资料。
+                    {t('我同意工作室仅为处理本次询价使用所提交的联系方式和参考资料。')}
                     {site.privacyNotice && ` ${site.privacyNotice}`}
                   </span>
                 </label>
                 <button type="submit" disabled={inquiryState === 'working'} className="button-primary w-full">
                   <Send className="h-4 w-4" />
-                  {inquiryState === 'working' ? '正在安全上传并提交' : '提交询价'}
+                  {t(inquiryState === 'working' ? '正在安全上传并提交' : '提交询价')}
                 </button>
               </form>
             </section>
@@ -354,18 +356,18 @@ export default function CommissionForm({
 
           <div className="lg:col-span-6">
             <section className="ui-panel p-5 md:p-6" aria-labelledby="review-form-title">
-              <span className="page-kicker">Verified review</span>
+              <span className="page-kicker">{t('真实评价')}</span>
               <h2 id="review-form-title" className="section-heading mt-2">
-                提交真实评价
+                {t('提交真实评价')}
               </h2>
               <p className="mt-3 text-xs leading-6 text-studio-muted">
-                请只提交真实体验。内容默认待审核，不会自动公开。
+                {t('请只提交真实体验。内容默认待审核，不会自动公开。')}
               </p>
               {reviewState === 'error' && (
                 <StatusNotice
                   tone="error"
                   compact
-                  title="评价未提交"
+                  title={t('评价未提交')}
                   description={reviewMessage}
                   className="mt-5"
                 />
@@ -374,15 +376,15 @@ export default function CommissionForm({
                 <StatusNotice
                   tone="success"
                   compact
-                  title="评价已提交"
-                  description={reviewMessage || '审核通过后才会出现在公开列表。'}
+                  title={t('评价已提交')}
+                  description={reviewMessage || t('审核通过后才会出现在公开列表。')}
                   className="mt-5"
                 />
               )}
               <form onSubmit={submitReviewForm} className="mt-6 space-y-5">
                 <fieldset>
-                  <legend className="field-label">评分 *</legend>
-                  <div className="flex gap-1" role="radiogroup" aria-label="选择 1 到 5 星评分">
+                  <legend className="field-label">{t('评分 *')}</legend>
+                  <div className="flex gap-1" role="radiogroup" aria-label={t('选择 1 到 5 星评分')}>
                     {[1, 2, 3, 4, 5].map((value) => (
                       <label key={value} className="cursor-pointer rounded-[4px] p-1.5">
                         <input
@@ -396,19 +398,19 @@ export default function CommissionForm({
                         <Star
                           className={`h-6 w-6 ${value <= rating ? 'fill-studio-brass text-studio-brass' : 'text-studio-faint'} peer-focus-visible:drop-shadow-[0_0_3px_#b79c67]`}
                         />
-                        <span className="sr-only">{value} 星</span>
+                        <span className="sr-only">{t('{count} 星', { count: value })}</span>
                       </label>
                     ))}
                   </div>
                 </fieldset>
-                <Field label="评价对象" id="review-project">
+                <Field label={t('评价对象')} id="review-project">
                   <select
                     id="review-project"
                     value={reviewTarget}
                     onChange={(event) => setReviewTarget(event.target.value)}
                     className="field-input"
                   >
-                    <option value="studio">工作室总体评价</option>
+                    <option value="studio">{t('工作室总体评价')}</option>
                     {projects.map((project) => (
                       <option key={project.id} value={project.slug}>
                         {project.title}
@@ -416,7 +418,7 @@ export default function CommissionForm({
                     ))}
                   </select>
                 </Field>
-                <Field label="姓名或昵称 *" id="reviewer-name">
+                <Field label={t('姓名或昵称 *')} id="reviewer-name">
                   <input
                     id="reviewer-name"
                     required
@@ -426,7 +428,7 @@ export default function CommissionForm({
                     className="field-input"
                   />
                 </Field>
-                <Field label="评价内容 *" id="review-comment">
+                <Field label={t('评价内容 *')} id="review-comment">
                   <textarea
                     id="review-comment"
                     required
@@ -443,7 +445,7 @@ export default function CommissionForm({
                   className="button-secondary w-full"
                 >
                   <MessageSquareText className="h-4 w-4" />
-                  {reviewState === 'working' ? '正在提交' : '提交待审核评价'}
+                  {t(reviewState === 'working' ? '正在提交' : '提交待审核评价')}
                 </button>
               </form>
             </section>
@@ -451,15 +453,15 @@ export default function CommissionForm({
             <section className="mt-8" aria-labelledby="approved-reviews-title">
               <div className="flex items-center justify-between border-b border-studio-line pb-3">
                 <h2 id="approved-reviews-title" className="section-heading">
-                  已审核评价
+                  {t('已审核评价')}
                 </h2>
-                <span className="tag border-studio-success/40 text-studio-success">Approved only</span>
+                <span className="tag border-studio-success/40 text-studio-success">{t('仅显示已审核')}</span>
               </div>
               {reviews.length === 0 ? (
                 <StatusNotice
                   tone="empty"
-                  title="暂无已审核评价"
-                  description="不会用演示评价或虚构反馈填充这里。"
+                  title={t('暂无已审核评价')}
+                  description={t('不会用演示评价或虚构反馈填充这里。')}
                   className="mt-5"
                 />
               ) : (
@@ -474,11 +476,14 @@ export default function CommissionForm({
                         <span className="tag">{review.projectName}</span>
                         {review.isDemo && (
                           <span className="tag border-studio-warning/40 text-studio-warning">
-                            本地开发数据
+                            {t('本地开发数据')}
                           </span>
                         )}
                       </div>
-                      <div className="mt-3 flex gap-0.5" aria-label={`${review.rating} 星`}>
+                      <div
+                        className="mt-3 flex gap-0.5"
+                        aria-label={t('{count} 星', { count: review.rating })}
+                      >
                         {Array.from({ length: 5 }, (_, index) => (
                           <Star
                             key={index}

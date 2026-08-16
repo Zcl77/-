@@ -83,22 +83,22 @@ def decide_quote(*, order_id, customer_user, decision):
     )
     accepted = decision == Order.QuoteDecision.ACCEPTED
     if decision not in {Order.QuoteDecision.ACCEPTED, Order.QuoteDecision.REJECTED}:
-        raise ValidationError("报价决定只能是接受或拒绝。")
+        raise ValidationError("报价决定只能是接受或拒绝。", code="invalid_quote_decision")
 
     if order.quote_decision == decision:
         return order, False
     if order.quote_decision in {Order.QuoteDecision.ACCEPTED, Order.QuoteDecision.REJECTED}:
-        raise ValidationError("该报价已经完成决定，不能重复修改。")
+        raise ValidationError("该报价已经完成决定，不能重复修改。", code="quote_already_decided")
     if order.confirmation_status != Order.ConfirmationStatus.PROPOSED:
-        raise ValidationError("当前订单没有等待确认的有效报价。")
+        raise ValidationError("当前订单没有等待确认的有效报价。", code="invalid_quote_state")
     if order.agreed_amount is None or order.agreed_amount <= 0:
-        raise ValidationError("报价金额无效，请联系工作室核对。")
+        raise ValidationError("报价金额无效，请联系工作室核对。", code="invalid_amounts")
     if order.quote_valid_until and order.quote_valid_until < timezone.now():
-        raise ValidationError("该报价已超过有效期，请联系工作室重新报价。")
+        raise ValidationError("该报价已超过有效期，请联系工作室重新报价。", code="quote_expired")
 
     order._prepare_amounts()
     if order.deposit_amount + order.final_amount != order.agreed_amount:
-        raise ValidationError("定金与尾款金额合计不等于订单金额，请联系工作室核对。")
+        raise ValidationError("定金与尾款金额合计不等于订单金额，请联系工作室核对。", code="invalid_amounts")
 
     now = timezone.now()
     order.quote_decision = decision
@@ -161,23 +161,23 @@ def decide_quote(*, order_id, customer_user, decision):
 @transaction.atomic
 def record_mock_payment(*, order_id, customer_user, payment_type):
     if not settings.MOCK_PAYMENTS_ENABLED:
-        raise ValidationError("模拟付款仅在显式启用的本地开发环境开放。")
+        raise ValidationError("模拟付款仅在显式启用的本地开发环境开放。", code="mock_payment_disabled")
     order = (
         Order.objects.select_for_update()
         .select_related("customer__user")
         .get(pk=order_id, customer__user=customer_user)
     )
     if not order.is_mock_payment_eligible_for(customer_user):
-        raise ValidationError("模拟付款仅允许明确标记的本地开发客户和开发订单。")
+        raise ValidationError("模拟付款仅允许明确标记的本地开发客户和开发订单。", code="mock_payment_not_eligible")
     if payment_type not in {PaymentRecord.PaymentType.DEPOSIT, PaymentRecord.PaymentType.FINAL}:
-        raise ValidationError("模拟付款类型只能是定金或尾款。")
+        raise ValidationError("模拟付款类型只能是定金或尾款。", code="invalid_payment_type")
     if (
         order.confirmation_status != Order.ConfirmationStatus.CONFIRMED
         or order.quote_decision != Order.QuoteDecision.ACCEPTED
     ):
-        raise ValidationError("只有已接受报价的订单可以进行本地模拟付款。")
+        raise ValidationError("只有已接受报价的订单可以进行本地模拟付款。", code="invalid_payment_state")
     if order.currency != Order.Currency.CNY:
-        raise ValidationError("当前仅支持人民币 CNY 订单的模拟付款。")
+        raise ValidationError("当前仅支持人民币 CNY 订单的模拟付款。", code="mock_currency_unsupported")
     if (
         order.agreed_amount is None
         or order.agreed_amount <= 0
@@ -185,7 +185,7 @@ def record_mock_payment(*, order_id, customer_user, payment_type):
         or order.final_amount < 0
         or order.deposit_amount + order.final_amount != order.agreed_amount
     ):
-        raise ValidationError("订单金额、定金或尾款配置不合法，无法付款。")
+        raise ValidationError("订单金额、定金或尾款配置不合法，无法付款。", code="invalid_amounts")
 
     idempotency_key = f"mock:{order.pk}:{payment_type}:succeeded"
     existing = PaymentRecord.objects.filter(idempotency_key=idempotency_key).first()
@@ -198,14 +198,14 @@ def record_mock_payment(*, order_id, customer_user, payment_type):
             and order.payment_status == Order.PaymentStatus.PAID
         )
         if not valid_replay:
-            raise ValidationError("付款记录与订单状态不一致，请联系工作室核对。")
+            raise ValidationError("付款记录与订单状态不一致，请联系工作室核对。", code="payment_state_mismatch")
         return order, existing, False
 
     if payment_type == PaymentRecord.PaymentType.DEPOSIT:
         if order.deposit_amount <= 0:
-            raise ValidationError("该订单无需支付定金。")
+            raise ValidationError("该订单无需支付定金。", code="deposit_not_required")
         if order.payment_status != Order.PaymentStatus.DEPOSIT_PENDING:
-            raise ValidationError("该订单当前不处于定金待支付状态。")
+            raise ValidationError("该订单当前不处于定金待支付状态。", code="invalid_payment_state")
         amount = order.deposit_amount
         next_status = (
             Order.PaymentStatus.FINAL_PENDING if order.final_amount > 0 else Order.PaymentStatus.PAID
@@ -214,9 +214,9 @@ def record_mock_payment(*, order_id, customer_user, payment_type):
         order.payment_status = next_status
     else:
         if order.final_amount <= 0:
-            raise ValidationError("该订单无需支付尾款。")
+            raise ValidationError("该订单无需支付尾款。", code="final_not_required")
         if order.payment_status != Order.PaymentStatus.FINAL_PENDING:
-            raise ValidationError("该订单当前不处于尾款待支付状态。")
+            raise ValidationError("该订单当前不处于尾款待支付状态。", code="invalid_payment_state")
         amount = order.final_amount
         order.final_payment_status = Order.PaymentRecordStatus.RECORDED
         order.payment_status = Order.PaymentStatus.PAID

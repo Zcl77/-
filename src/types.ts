@@ -128,7 +128,7 @@ export interface CustomerPaymentRecord {
   paymentType: 'deposit' | 'final' | 'refund';
   channel: 'mock';
   amount: string;
-  currency: 'CNY';
+  currency: 'CNY' | 'USD';
   status: 'pending' | 'succeeded' | 'failed' | 'refunded';
   mockTransactionId: string | null;
   paidAt: string | null;
@@ -141,7 +141,7 @@ export interface CustomerOrder {
   orderType: string;
   confirmationStatus: 'inquiry' | 'proposed' | 'confirmed' | 'cancelled';
   agreedAmount: string | null;
-  currency: 'CNY';
+  currency: 'CNY' | 'USD';
   depositAmount: string;
   finalAmount: string;
   quotedAt: string | null;
