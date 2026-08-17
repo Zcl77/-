@@ -20,7 +20,7 @@ export default function App() {
   const route = useMemo(() => parseRoute(path), [path]);
   const publicData = usePublicSiteData();
   const auth = useSessionAuth();
-  const { locale, t } = useI18n();
+  const { locale, localeTransitionPhase, t } = useI18n();
   const accountLabel = auth.user.authenticated ? t('我的项目') : t('客户登录');
 
   useEffect(() => {
@@ -30,7 +30,7 @@ export default function App() {
       contact: t('询价与评价'),
       account: accountLabel,
     };
-    document.title = `${titles[route.tab]} | 知行造境`;
+    document.title = `${titles[route.tab]} | ${t('知行造境')}`;
   }, [accountLabel, locale, route.tab, t]);
 
   const navigateTab = (tab: AppTab) => {
@@ -152,7 +152,10 @@ export default function App() {
     <MotionConfig reducedMotion="user" transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
       <div className="min-h-dvh bg-studio-canvas font-sans text-studio-ink">
         <Sidebar activeTab={route.tab} onNavigate={navigateTab} accountLabel={accountLabel} />
-        <div className="min-h-dvh pb-[4.5rem] pt-14 lg:pb-0 lg:pl-28 lg:pt-0">
+        <div
+          className="locale-transition-content min-h-dvh pb-[4.5rem] pt-14 lg:pb-0 lg:pl-28 lg:pt-0"
+          data-locale-phase={localeTransitionPhase}
+        >
           {route.tab !== 'account' && publicData.refreshError && (
             <div className="mx-auto max-w-7xl px-5 pt-4 md:px-8">
               <StatusNotice

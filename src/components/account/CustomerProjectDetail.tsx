@@ -61,6 +61,11 @@ export default function CustomerProjectDetail({ projectId, onBack }: CustomerPro
   const [acknowledging, setAcknowledging] = useState<Set<string>>(() => new Set());
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number; alt: string } | null>(null);
   const requestGate = useRef(new LatestRequestGate());
+  const errorMessageRef = useRef(errorMessage);
+
+  useEffect(() => {
+    errorMessageRef.current = errorMessage;
+  }, [errorMessage]);
   const messageSubmitting = useRef(false);
   const acknowledgementSubmitting = useRef(new Set<string>());
 
@@ -87,7 +92,7 @@ export default function CustomerProjectDetail({ projectId, onBack }: CustomerPro
         setSyncError(null);
       } catch (reason) {
         if (!isLatest()) return;
-        const message = errorMessage(reason, '项目内容加载失败。');
+        const message = errorMessageRef.current(reason, '项目内容加载失败。');
         if (background) setSyncError(message);
         else {
           setError(message);
@@ -96,7 +101,7 @@ export default function CustomerProjectDetail({ projectId, onBack }: CustomerPro
         throw reason;
       }
     },
-    [errorMessage, projectId],
+    [projectId],
   );
 
   useEffect(() => {

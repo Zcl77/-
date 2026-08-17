@@ -99,6 +99,11 @@ export default function CustomerPortal({
   const requestGate = useRef(new LatestRequestGate());
   const quoteSubmitting = useRef(false);
   const paymentSubmitting = useRef(false);
+  const errorMessageRef = useRef(errorMessage);
+
+  useEffect(() => {
+    errorMessageRef.current = errorMessage;
+  }, [errorMessage]);
 
   const load = useCallback(
     async (background = false) => {
@@ -117,7 +122,7 @@ export default function CustomerPortal({
         setSyncError(null);
       } catch (reason) {
         if (!isLatest()) return;
-        const message = errorMessage(reason, '项目列表加载失败。');
+        const message = errorMessageRef.current(reason, '项目列表加载失败。');
         if (background) setSyncError(message);
         else {
           setError(message);
@@ -126,7 +131,7 @@ export default function CustomerPortal({
         throw reason;
       }
     },
-    [errorMessage, user.isStaff, user.mustChangePassword],
+    [user.isStaff, user.mustChangePassword],
   );
 
   useEffect(() => {

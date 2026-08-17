@@ -1,10 +1,41 @@
-import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { ApiError } from '../services/api/client';
+import { createLocaleTransitionController, LocaleTransitionPhase } from './localeTransition';
 
 export type Locale = 'zh-CN' | 'en';
 const STORAGE_KEY = 'zhixing.locale';
 
 const en: Record<string, string> = {
+  知行造境: 'Zhixing Studio',
+  语言切换: 'Language switcher',
+  切换到简体中文: 'Switch to Simplified Chinese',
+  切换到英文: 'Switch to English',
+  封面缩略图: 'Cover thumbnail',
+  '视角 {index} 缩略图': 'View {index} thumbnail',
+  '{name} 空间图': '{name} room image',
+  '{count} 张细节图': '{count} detail images',
+  '{name} 细节 {index}': '{name} detail {index}',
+  '公开内容加载失败。': 'Could not load public content.',
+  '登录状态检查失败。': 'Could not check the sign-in session.',
+  '项目列表加载失败。': 'Could not load the project list.',
+  '报价决定未能提交。': 'The quote decision could not be submitted.',
+  '本地模拟付款未能完成。': 'The local mock payment could not be completed.',
+  '退出登录失败，请重试。': 'Could not sign out. Please try again.',
+  '项目内容加载失败。': 'Could not load the project details.',
+  '留言发送失败。': 'Could not send the message.',
+  '确认失败，请稍后重试。': 'Could not record the acknowledgement. Please try again.',
+  '登录失败，请稍后重试。': 'Could not sign in. Please try again.',
+  '密码修改失败。': 'Could not change the password.',
+  '请填写昵称。': 'Enter a name or nickname.',
+  '昵称不能超过 80 个字符。': 'The name or nickname must be 80 characters or fewer.',
+  '评分必须是 1–5 的整数。': 'The rating must be a whole number from 1 to 5.',
+  '请选择评鉴对象。': 'Select a review subject.',
+  '项目名称不能超过 160 个字符。': 'The project name must be 160 characters or fewer.',
+  '请填写评鉴内容。': 'Enter the review.',
+  '评鉴内容不能超过 2000 个字符。': 'The review must be 2,000 characters or fewer.',
+  '仅支持 JPEG、PNG 或 WebP 图片。': 'Only JPEG, PNG, or WebP images are supported.',
+  '图片文件为空。': 'The image file is empty.',
+  '图片不能超过 15 MB。': 'Images must not exceed 15 MB.',
   工作室联系信息: 'Studio contact',
   项目询价: 'Project inquiry',
   真实评价: 'Verified review',
@@ -349,6 +380,12 @@ const en: Record<string, string> = {
   '该订单无需支付尾款。': 'This order does not require a final payment.',
 };
 
+const warnedMissingTranslations = new Set<string>();
+
+export function hasEnglishTranslation(key: string) {
+  return Object.prototype.hasOwnProperty.call(en, key);
+}
+
 const errorCodeKeys: Record<string, string> = {
   invalid_quote_decision: '报价决定无效。',
   quote_expired: '报价已过期，请联系工作室重新报价。',
@@ -391,11 +428,28 @@ export function getStoredLocale(): Locale {
 }
 
 export function translate(locale: Locale, key: string, variables: Record<string, string | number> = {}) {
+  if (
+    locale === 'en' &&
+    !hasEnglishTranslation(key) &&
+    import.meta.env.DEV &&
+    !warnedMissingTranslations.has(key)
+  ) {
+    warnedMissingTranslations.add(key);
+    console.warn(`[i18n] Missing English translation: ${key}`);
+  }
   const template = locale === 'en' ? en[key] || key : key;
   return Object.entries(variables).reduce(
     (result, [name, value]) => result.replaceAll(`{${name}}`, String(value)),
     template,
   );
+}
+
+export function formatLocalizedDate(
+  locale: Locale,
+  value: string | Date,
+  options?: Intl.DateTimeFormatOptions,
+) {
+  return new Intl.DateTimeFormat(locale, options).format(new Date(value));
 }
 
 export function formatLocalizedMoney(
@@ -424,6 +478,8 @@ export function localizedErrorMessage(locale: Locale, reason: unknown, fallback:
 interface I18nValue {
   locale: Locale;
   setLocale: (locale: Locale) => void;
+  localeTransitionPhase: LocaleTransitionPhase;
+  isChangingLocale: boolean;
   t: (key: string, variables?: Record<string, string | number>) => string;
   formatDate: (value: string | Date, options?: Intl.DateTimeFormatOptions) => string;
   formatMoney: (amount: string | null | undefined, currency: 'CNY' | 'USD') => string;
@@ -434,27 +490,66 @@ const I18nContext = createContext<I18nValue | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(getStoredLocale);
-  const setLocale = (next: Locale) => {
+  const [localeTransitionPhase, setLocaleTransitionPhase] = useState<LocaleTransitionPhase>('idle');
+  const commitLocale = useCallback((next: Locale) => {
     try {
       window.localStorage?.setItem(STORAGE_KEY, next);
     } catch {
       // Language switching still works for this session when storage is unavailable.
     }
     setLocaleState(next);
-  };
+  }, []);
+  const transitionController = useMemo(
+    () =>
+      createLocaleTransitionController({
+        commitLocale,
+        setPhase: setLocaleTransitionPhase,
+        prefersReducedMotion: () =>
+          typeof window !== 'undefined' &&
+          Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches),
+      }),
+    [commitLocale],
+  );
+  const setLocale = useCallback(
+    (next: Locale) => {
+      transitionController.change(locale, next);
+    },
+    [locale, transitionController],
+  );
+  const t = useCallback(
+    (key: string, variables?: Record<string, string | number>) => translate(locale, key, variables),
+    [locale],
+  );
+  const formatDate = useCallback(
+    (value: string | Date, options?: Intl.DateTimeFormatOptions) =>
+      formatLocalizedDate(locale, value, options),
+    [locale],
+  );
+  const formatMoney = useCallback(
+    (amount: string | null | undefined, currency: 'CNY' | 'USD') =>
+      formatLocalizedMoney(locale, amount, currency),
+    [locale],
+  );
+  const errorMessage = useCallback(
+    (reason: unknown, fallback: string) => localizedErrorMessage(locale, reason, fallback),
+    [locale],
+  );
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
+  useEffect(() => () => transitionController.dispose(), [transitionController]);
   const value = useMemo<I18nValue>(
     () => ({
       locale,
       setLocale,
-      t: (key, variables) => translate(locale, key, variables),
-      formatDate: (value, options) => new Intl.DateTimeFormat(locale, options).format(new Date(value)),
-      formatMoney: (amount, currency) => formatLocalizedMoney(locale, amount, currency),
-      errorMessage: (reason, fallback) => localizedErrorMessage(locale, reason, fallback),
+      localeTransitionPhase,
+      isChangingLocale: localeTransitionPhase !== 'idle',
+      t,
+      formatDate,
+      formatMoney,
+      errorMessage,
     }),
-    [locale],
+    [errorMessage, formatDate, formatMoney, locale, localeTransitionPhase, setLocale, t],
   );
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

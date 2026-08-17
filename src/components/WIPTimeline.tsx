@@ -160,7 +160,7 @@ export default function WIPTimeline({ posts, onOpenWork }: WIPTimelineProps) {
                   </div>
 
                   {selected.images.length > 1 && (
-                    <section className="mt-10 border-t border-studio-line pt-7" aria-label="过程图片">
+                    <section className="mt-10 border-t border-studio-line pt-7" aria-label={t('过程图片')}>
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                         {selected.images.map((image, index) => (
                           <button

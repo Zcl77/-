@@ -14,12 +14,13 @@ import {
 } from 'lucide-react';
 import {
   GalleryMediaSelection,
+  filterProjectsByCategory,
   listProjectMedia,
   mediaSelection,
   resolveGalleryMedia,
   resolveSelectedProject,
 } from '../domain/gallerySelection';
-import { Project } from '../types';
+import { Project, PublicCategory } from '../types';
 import GalleryProjectSidebar from './gallery/GalleryProjectSidebar';
 import MediaLightbox from './ui/MediaLightbox';
 import SmartImage from './ui/SmartImage';
@@ -28,7 +29,7 @@ import { useI18n } from '../i18n';
 
 interface GalleryViewProps {
   projects: Project[];
-  categories: string[];
+  categories: PublicCategory[];
   selectedProjectSlug?: string | null;
   onProjectChange?: (project: Project) => void;
   onCategoryChange?: () => void;
@@ -49,20 +50,18 @@ export default function GalleryView({
   onCategoryChange,
 }: GalleryViewProps) {
   const { locale, t } = useI18n();
-  const [selectedCategory, setSelectedCategory] = useState<string | 'All'>('All');
+  const [selectedCategorySlug, setSelectedCategorySlug] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [activeMediaSelection, setActiveMediaSelection] = useState<GalleryMediaSelection | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
 
-  const visibleCategories = categories;
   const filteredProjects = useMemo(
-    () =>
-      selectedCategory === 'All'
-        ? projects
-        : projects.filter((project) => project.category === selectedCategory),
-    [projects, selectedCategory],
+    () => filterProjectsByCategory(projects, selectedCategorySlug),
+    [projects, selectedCategorySlug],
   );
+  const selectedCategoryName =
+    categories.find((category) => category.slug === selectedCategorySlug)?.name ?? null;
   const selectedProject = useMemo(
     () =>
       resolveSelectedProject(
@@ -86,8 +85,8 @@ export default function GalleryView({
   const lightboxAlt = useMemo(() => {
     if (!lightbox || !selectedProject) return '';
     if (lightbox.source === 'project') return selectedProject.title;
-    return selectedProject.rooms?.find((room) => room.id === lightbox.roomId)?.name ?? lightbox.alt;
-  }, [lightbox, selectedProject]);
+    return selectedProject.rooms?.find((room) => room.id === lightbox.roomId)?.name || t('空间细节');
+  }, [lightbox, selectedProject, t]);
 
   useEffect(() => {
     if (selectedProject?.id !== selectedProjectId) {
@@ -158,30 +157,33 @@ export default function GalleryView({
             <div>
               <span className="page-kicker">{t('微缩建筑作品档案')}</span>
               <h1 className="page-title mt-2">
-                知行造境{' '}
-                <span className="block text-base font-normal text-studio-muted sm:inline sm:text-lg">
-                  / Zhixing Studio
-                </span>
+                {t('知行造境')}
+                {locale === 'zh-CN' && (
+                  <span className="block text-base font-normal text-studio-muted sm:inline sm:text-lg">
+                    {' '}
+                    / Zhixing Studio
+                  </span>
+                )}
               </h1>
               <p className="page-description mt-3">
                 {t('以图像为主的微缩建筑与场景制作档案。当前作品均标注真实或演示状态。')}
               </p>
             </div>
             <nav className="-mx-1 flex max-w-full gap-2 overflow-x-auto px-1 pb-1" aria-label={t('作品分类')}>
-              {['All', ...visibleCategories].map((category) => {
-                const active = selectedCategory === category;
+              {[{ slug: null, name: t('全部作品') }, ...categories].map((category) => {
+                const active = selectedCategorySlug === category.slug;
                 return (
                   <button
-                    key={category}
+                    key={category.slug ?? 'all'}
                     type="button"
                     onClick={() => {
-                      setSelectedCategory(category);
+                      setSelectedCategorySlug(category.slug);
                       onCategoryChange?.();
                     }}
                     aria-pressed={active}
                     className={`min-h-9 shrink-0 rounded-[4px] border px-3 text-xs transition-colors duration-200 ${active ? 'border-studio-brass bg-studio-brass text-studio-canvas' : 'border-studio-line text-studio-muted hover:border-studio-faint hover:text-studio-ink'}`}
                   >
-                    {category === 'All' ? t('全部作品') : category}
+                    {category.name}
                   </button>
                 );
               })}
@@ -253,7 +255,7 @@ export default function GalleryView({
                       >
                         <SmartImage
                           src={item.url}
-                          alt={`${selectedProject.title} ${index === 0 ? '封面缩略图' : `视角 ${index} 缩略图`}`}
+                          alt={`${selectedProject.title} ${t(index === 0 ? '封面缩略图' : '视角 {index} 缩略图', { index })}`}
                           className="media-hover h-full w-full object-cover"
                           referrerPolicy="no-referrer"
                           loading="lazy"
@@ -386,6 +388,7 @@ export default function GalleryView({
                   <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
                     {selectedProject.rooms.map((room) => {
                       const active = selectedRoomId === room.id;
+                      const roomName = room.name || t('空间细节');
                       return (
                         <article
                           key={room.id}
@@ -400,7 +403,7 @@ export default function GalleryView({
                             <span className="block aspect-[4/3] overflow-hidden bg-black">
                               <SmartImage
                                 src={room.coverUrl}
-                                alt={`${room.name} 空间图`}
+                                alt={t('{name} 空间图', { name: roomName })}
                                 showFallbackText
                                 className="media-hover h-full w-full object-cover"
                                 referrerPolicy="no-referrer"
@@ -411,10 +414,10 @@ export default function GalleryView({
                             <span className="flex items-center justify-between gap-3 p-4">
                               <span>
                                 <strong className="block font-serif text-base font-semibold text-studio-ink">
-                                  {room.name}
+                                  {roomName}
                                 </strong>
                                 <span className="mt-1 block text-xs text-studio-muted">
-                                  {room.images.length} 张细节图
+                                  {t('{count} 张细节图', { count: room.images.length })}
                                 </span>
                               </span>
                               <span className="text-xs text-studio-brass">
@@ -431,12 +434,13 @@ export default function GalleryView({
                     (() => {
                       const room = selectedProject.rooms?.find((item) => item.id === selectedRoomId);
                       if (!room) return null;
+                      const roomName = room.name || t('空间细节');
                       return (
                         <div className="mt-6 border-y border-studio-line py-7">
                           <div className="flex items-start justify-between gap-4">
                             <div>
                               <span className="page-kicker">{t('当前空间')}</span>
-                              <h3 className="section-heading mt-2">{room.name}</h3>
+                              <h3 className="section-heading mt-2">{roomName}</h3>
                             </div>
                             <button
                               type="button"
@@ -473,7 +477,7 @@ export default function GalleryView({
                                   const item = {
                                     key: `room-${room.id}-${imageIndex}`,
                                     url: image,
-                                    alt: `${room.name} 细节 ${imageIndex + 1}`,
+                                    alt: t('{name} 细节 {index}', { name: roomName, index: imageIndex + 1 }),
                                     type: 'room-image' as const,
                                     roomId: room.id,
                                     imageIndex,
@@ -512,7 +516,7 @@ export default function GalleryView({
             <GalleryProjectSidebar
               selectedProject={selectedProject}
               projects={filteredProjects}
-              selectedCategory={selectedCategory}
+              selectedCategory={selectedCategoryName}
               onSelectProject={selectProject}
             />
           </div>
@@ -523,7 +527,11 @@ export default function GalleryView({
             description={t('隐藏分类和隐藏作品不会出现在访客页面。可以返回全部作品继续浏览。')}
             className="mt-8"
             action={
-              <button type="button" onClick={() => setSelectedCategory('All')} className="button-secondary">
+              <button
+                type="button"
+                onClick={() => setSelectedCategorySlug(null)}
+                className="button-secondary"
+              >
                 <Images className="h-4 w-4" />
                 {t('查看全部作品')}
               </button>
@@ -532,7 +540,7 @@ export default function GalleryView({
         )}
 
         <footer className="mt-14 flex flex-col justify-between gap-2 border-t border-studio-line py-6 text-[10px] text-studio-faint sm:flex-row">
-          <span>知行造境 / Zhixing Studio</span>
+          <span>{locale === 'zh-CN' ? '知行造境 / Zhixing Studio' : 'Zhixing Studio'}</span>
           <span>{t('微缩建筑与场景制作')}</span>
         </footer>
       </div>

@@ -6,7 +6,7 @@ import { useI18n } from '../../i18n';
 interface GalleryProjectSidebarProps {
   selectedProject: Project;
   projects: Project[];
-  selectedCategory: string;
+  selectedCategory: string | null;
   onSelectProject: (project: Project) => void;
 }
 
@@ -117,7 +117,7 @@ export default function GalleryProjectSidebar({
         <section className="mt-8" aria-labelledby="project-index">
           <div className="flex items-center justify-between gap-3">
             <h3 id="project-index" className="section-title">
-              {selectedCategory === 'All' ? t('作品索引') : `${selectedCategory} / ${t('作品索引')}`}
+              {selectedCategory ? `${selectedCategory} / ${t('作品索引')}` : t('作品索引')}
             </h3>
             <span className="text-[10px] text-studio-faint">
               {projects.length} {t('件')}
@@ -137,7 +137,7 @@ export default function GalleryProjectSidebar({
                   <span className="aspect-[4/3] w-20 shrink-0 overflow-hidden rounded-[2px] bg-black">
                     <SmartImage
                       src={project.coverUrl}
-                      alt={`${project.title} 封面缩略图`}
+                      alt={`${project.title} ${t('封面缩略图')}`}
                       className="media-hover h-full w-full object-cover"
                       referrerPolicy="no-referrer"
                       loading="lazy"

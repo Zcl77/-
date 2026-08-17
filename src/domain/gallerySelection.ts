@@ -22,6 +22,10 @@ export function resolveSelectedProject(
   return projects.find((project) => project.id === selectedProjectId) ?? projects[0] ?? null;
 }
 
+export function filterProjectsByCategory(projects: Project[], categorySlug: string | null) {
+  return categorySlug ? projects.filter((project) => project.categorySlug === categorySlug) : projects;
+}
+
 export function listProjectMedia(project: Project | null, locale: Locale = 'zh-CN'): GalleryMedia[] {
   if (!project) return [];
 

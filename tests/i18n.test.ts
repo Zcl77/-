@@ -2,13 +2,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../src/services/api/client';
 import {
   formatLocalizedMoney,
+  formatLocalizedDate,
   getStoredLocale,
   localizedErrorMessage,
   resolveInitialLocale,
   translate,
 } from '../src/i18n';
+import { createLocaleTransitionController } from '../src/i18n/localeTransition';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe('internationalization foundation', () => {
   it('uses saved language first, then browser language, then Chinese', () => {
@@ -42,6 +47,52 @@ describe('internationalization foundation', () => {
     expect(formatLocalizedMoney('zh-CN', '1000.00', 'CNY')).toBe('¥1,000.00');
     expect(formatLocalizedMoney('en', '700.50', 'USD')).toBe('$700.50');
     expect(formatLocalizedMoney('en', '9007199254740993.25', 'USD')).toBe('$9,007,199,254,740,993.25');
+  });
+
+  it('formats dates for the active locale', () => {
+    const options = { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' } as const;
+    expect(formatLocalizedDate('zh-CN', '2026-08-17T00:00:00Z', options)).toContain('2026');
+    expect(formatLocalizedDate('en', '2026-08-17T00:00:00Z', options)).toBe('August 17, 2026');
+  });
+
+  it('switches both directions without accepting rapid duplicate input', () => {
+    vi.useFakeTimers();
+    let locale = 'zh-CN' as 'zh-CN' | 'en';
+    const phases: string[] = [];
+    const controller = createLocaleTransitionController({
+      prefersReducedMotion: () => false,
+      commitLocale: (next) => {
+        locale = next;
+      },
+      setPhase: (phase) => phases.push(phase),
+    });
+
+    expect(controller.change(locale, 'en')).toBe(true);
+    expect(controller.change(locale, 'zh-CN')).toBe(false);
+    expect(locale).toBe('zh-CN');
+    vi.advanceTimersByTime(100);
+    expect(locale).toBe('en');
+    vi.advanceTimersByTime(110);
+    expect(phases).toEqual(['out', 'in', 'idle']);
+    expect(controller.change(locale, 'zh-CN')).toBe(true);
+    vi.runAllTimers();
+    expect(locale).toBe('zh-CN');
+  });
+
+  it('changes immediately when reduced motion is requested', () => {
+    let locale = 'zh-CN' as 'zh-CN' | 'en';
+    const phases: string[] = [];
+    const controller = createLocaleTransitionController({
+      prefersReducedMotion: () => true,
+      commitLocale: (next) => {
+        locale = next;
+      },
+      setPhase: (phase) => phases.push(phase),
+    });
+
+    expect(controller.change(locale, 'en')).toBe(true);
+    expect(locale).toBe('en');
+    expect(phases).toEqual([]);
   });
 
   it('maps stable API error codes instead of parsing backend Chinese messages', () => {

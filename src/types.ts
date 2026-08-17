@@ -1,5 +1,10 @@
 export type ProjectCategory = string;
 
+export interface PublicCategory {
+  slug: string;
+  name: string;
+}
+
 export type ProjectVisibility = 'public' | 'hidden';
 export type ReviewStatus = 'pending' | 'approved' | 'rejected';
 
@@ -27,6 +32,7 @@ export interface Project {
   title: string;
   scale: string;
   category: ProjectCategory;
+  categorySlug: string;
   status: 'WIP' | 'Completed' | 'Sold';
   visibility: ProjectVisibility;
   description: string;

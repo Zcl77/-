@@ -34,7 +34,7 @@ function BrandButton({ onClick, compact = false }: { onClick: () => void; compac
         知
       </span>
       <span className={compact ? 'block' : 'text-center'}>
-        <strong className="block font-serif text-sm font-semibold text-studio-ink">知行造境</strong>
+        <strong className="block font-serif text-sm font-semibold text-studio-ink">{t('知行造境')}</strong>
         <span className="mt-0.5 block text-[9px] font-medium uppercase tracking-[0.12em] text-studio-muted">
           Zhixing Studio
         </span>

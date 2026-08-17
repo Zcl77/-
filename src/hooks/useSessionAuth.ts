@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   changePassword as requestPasswordChange,
   getCurrentUser,
@@ -13,6 +13,11 @@ export function useSessionAuth() {
   const [user, setUser] = useState<CurrentUser>({ authenticated: false });
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
+  const errorMessageRef = useRef(errorMessage);
+
+  useEffect(() => {
+    errorMessageRef.current = errorMessage;
+  }, [errorMessage]);
 
   const refresh = useCallback(async () => {
     setStatus('loading');
@@ -22,13 +27,16 @@ export function useSessionAuth() {
       setStatus('ready');
     } catch (reason) {
       setUser({ authenticated: false });
-      setError(errorMessage(reason, '登录状态检查失败。'));
+      setError(errorMessageRef.current(reason, '登录状态检查失败。'));
       setStatus('error');
     }
-  }, [errorMessage]);
+  }, []);
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
     const expire = () => {
       setUser({ authenticated: false });
       setStatus('ready');
@@ -36,7 +44,7 @@ export function useSessionAuth() {
     };
     window.addEventListener('zhixing:session-expired', expire);
     return () => window.removeEventListener('zhixing:session-expired', expire);
-  }, [refresh, t]);
+  }, [t]);
 
   const login = useCallback(async (username: string, password: string) => {
     const result = await requestLogin(username, password);
