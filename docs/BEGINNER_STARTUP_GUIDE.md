@@ -38,6 +38,19 @@
 - **媒体 Volume**保存后台上传的图片。
 - **GitHub**保存源代码，但不代替数据库和媒体 Volume。
 
+### 容器、Volume 和关机到底是什么关系
+
+可以把**容器**理解为正在工作的机器，把 **Volume** 理解为机器旁边单独保存数据的硬盘：
+
+- 容器运行时，前端、后端和 MySQL 才能提供网页服务；
+- `docker compose stop` 只会关闭这些机器，不会擦除 Volume；
+- 电脑关机后网站会停止，但数据库和图片仍保存在这台电脑的 Docker Volume 中；
+- 下次在同一台电脑执行 `docker compose start`，容器会继续读取原来的 Volume；
+- GitHub 克隆只能得到程序，无法自动取得另一台电脑硬盘里的 Volume；
+- 便携包的作用，就是把数据库和媒体 Volume 做成可校验的副本，再在新电脑创建新的容器和 Volume 并恢复数据。
+
+制作便携包时，原电脑的数据库和后端需要暂时运行，以便脚本取得同一时间点的一致备份。打包成功并复制完成后，原电脑可以安全停止和关机。新电脑恢复完成后拥有独立的数据副本，不需要原电脑保持开机、联网或继续运行容器。
+
 只打开 VS Code 不会启动网站，也不需要手工执行 `npm run dev`。本项目的前端、后端和数据库统一由 Docker Compose 启动。
 
 ## 二、新电脑需要准备什么
@@ -222,14 +235,40 @@ docker compose ps
 
 ## 六、把当前电脑的内容原样带到另一台电脑
 
-如果需要保留本机已有的作品、图片、客户项目、订单和账号，仅有 GitHub 不够。关机前在当前项目根目录执行：
+如果需要保留本机已有的作品、图片、客户项目、订单和账号，仅有 GitHub 不够。必须先在原电脑创建便携包，再在新电脑恢复。不要手工复制 Docker 内部目录，也不要把数据库或 `.env` 上传到 GitHub。
+
+### 6.1 原电脑：关机前创建便携包
+
+打开 Docker Desktop 和 PowerShell，进入固定项目目录。下面以 `D:\zhixing-studio` 为例；如果实际目录不同，请换成自己的真实路径：
 
 ```powershell
-docker compose up -d
+Set-Location D:\zhixing-studio
+git switch main
+git pull --ff-only origin main
+git status --short --branch
+docker compose up -d --build
+docker compose ps
+```
+
+先确认：
+
+- Git 显示 `main...origin/main`；
+- 没有以 `M`、`??` 等符号开头的未提交文件；
+- `db`、`backend` 和 `frontend` 都在运行，数据库和后端显示 `healthy`。
+
+如果工作区不干净、服务未启动或出现错误，先停止打包并处理问题，不要假装打包已经完成。确认无误后执行：
+
+```powershell
 .\scripts\package-portable.ps1
 ```
 
-脚本完成后，会在 `artifacts\portable\<时间>` 生成一个便携包目录。它包含：
+这个过程可能需要较长时间，因为脚本会备份数据库和图片、验证恢复、构建镜像并计算校验值。不要关闭 PowerShell、Docker Desktop 或电脑。脚本完成后，会在 `artifacts\portable\<时间>` 生成一个便携包目录。用下面的命令找到最新目录：
+
+```powershell
+Get-ChildItem .\artifacts\portable -Directory | Sort-Object LastWriteTime -Descending | Select-Object -First 1 FullName, LastWriteTime
+```
+
+便携包应包含：
 
 - 当前 Git 提交对应的源码；
 - MySQL 数据库快照；
@@ -237,15 +276,40 @@ docker compose up -d
 - 前端、后端和 MySQL Docker 镜像；
 - 校验清单和日志。
 
-然后完成三件事：
+顶层至少应看到 `source.zip`、`manifest.json`、`SHA256SUMS.txt`、`backup`、`images`、`docs` 和 `diagnostics`。脚本必须以成功状态结束；任何步骤失败都不能把该目录视为完整交付包。
+
+### 6.2 原电脑：复制和安全关机
+
+完成下面五件事：
 
 1. 把整个便携包目录复制到移动硬盘；
-2. 把本机 `.env` 单独放进密码库或加密 U 盘，不要放进便携包；
-3. 保留 GitHub 仓库地址和本说明书。
+2. 复制完成后，在移动硬盘中确认 `manifest.json`、`backup` 和 `images` 仍然存在；
+3. 把本机 `.env` 单独放进密码管理器、BitLocker 加密 U 盘或其他可靠加密介质；
+4. 不要把 `.env` 放进便携包、普通网盘、聊天或 GitHub；
+5. 保留 GitHub 仓库地址和本说明书。
 
-便携包脚本会做隔离恢复验证；任何步骤失败都不能把该目录视为完整交付包。详细的安全边界见 [便携打包与隔离恢复](PORTABLE_PACKAGE.md)。
+确认移动硬盘中的文件复制完整后，安全停止当前项目：
 
-在另一台电脑恢复时，先安装 Docker Desktop 和 Git、克隆仓库，然后使用全新的目标目录、项目名和端口。示例：
+```powershell
+docker compose stop
+```
+
+命令完成后可以关闭 Docker Desktop、弹出移动硬盘并关机。不要执行 `docker compose down -v`。详细的安全边界见 [便携打包与隔离恢复](PORTABLE_PACKAGE.md)。
+
+### 6.3 新电脑：准备恢复环境
+
+1. 安装并启动 Docker Desktop；
+2. 安装 Git for Windows；
+3. 从 GitHub 克隆最新 `main`，操作方法见第三章；
+4. 把完整便携包从移动硬盘复制到新电脑，例如 `E:\transfer\20260817T120000Z`；
+5. 把加密保存的 `.env` 解密到仅本人可访问的临时位置，例如 `E:\secure\zhixing-review.env`；
+6. 目标目录必须是一个不存在或完全为空的新目录。
+
+不要把新电脑已有项目的目录、容器或 Volume 当作恢复目标。
+
+### 6.4 新电脑：执行隔离恢复
+
+在新克隆的仓库中执行恢复命令。必须使用全新的目标目录、项目名和端口。示例：
 
 ```powershell
 Set-Location D:\web-projects\zhixing-studio
@@ -259,7 +323,29 @@ Set-Location D:\web-projects\zhixing-studio
   -MySqlHostPort 3407
 ```
 
-把示例中的时间、盘符和文件名换成实际值。恢复后访问 `http://127.0.0.1:3100/` 和 `http://127.0.0.1:8100/admin/`。恢复必须使用新项目名和空目录，不要覆盖已有运行环境。
+把示例中的时间、盘符和文件名换成实际值。脚本会先检查清单、文件大小、SHA-256、目标目录、项目名、端口、容器和 Volume；检查通过后才会创建新环境。它不会覆盖原电脑，也不会覆盖新电脑已有的项目。
+
+脚本成功结束后访问：
+
+- 前台：`http://127.0.0.1:3100/`
+- 管理后台：`http://127.0.0.1:8100/admin/`
+
+使用原数据库中的管理员或客户账号进行人工验收，并检查作品文字、图片、订单和客户项目是否与原电脑一致。此时数据已经属于新电脑自己的容器和 Volume，原电脑可以保持关机。
+
+### 6.5 新电脑：以后启动、查看和停止恢复环境
+
+恢复环境使用两个 Compose 配置文件。查看状态：
+
+```powershell
+docker compose --project-name zhixing-portable-review-20260817 `
+  --env-file D:\zhixing-portable-review\.env `
+  -f D:\zhixing-portable-review\compose.yaml `
+  -f D:\zhixing-portable-review\compose.portable.override.yaml ps
+```
+
+再次启动时，把最后的 `ps` 换成 `start`；安全停止时，把最后的 `ps` 换成 `stop`。项目名和目录必须与恢复命令中的实际值一致。
+
+不要为了缩短命令而猜测项目名，也不要执行 `down -v`。如果恢复失败，保留目标目录和 `restore-diagnostics.log`，根据终端最后显示的检查命令排查，不要删除已有 Volume。
 
 ## 七、最常见的问题
 
