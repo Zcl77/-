@@ -4,11 +4,13 @@ import tempfile
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TransactionTestCase, override_settings
+from django.utils import timezone
 
-from accounts.models import User
+from accounts.models import CustomerProfile, User
 from media_library.models import MediaAsset
 from portfolio.models import Category, StudioSetting, Work
-from projects.models import ClientProject, PaymentRecord, ProjectMembership
+from projects.models import ClientProject, Order, PaymentRecord, ProjectMembership
+from projects.serializers import OrderSerializer
 
 
 class DevelopmentDataCommandTests(TransactionTestCase):
@@ -77,3 +79,42 @@ class DevelopmentDataCommandTests(TransactionTestCase):
         self.assertFalse(PaymentRecord.objects.filter(pk=payment.pk).exists())
         self.assertTrue(Category.objects.filter(pk=real_category.pk).exists())
         self.assertTrue(StudioSetting.objects.filter(pk=real_setting.pk).exists())
+
+    @override_settings(DEBUG=True, ENVIRONMENT="development")
+    def test_prepare_checkout_dev_quote_refreshes_only_local_pending_quote(self):
+        call_command("seed_dev_data", stdout=io.StringIO())
+        call_command("prepare_checkout_dev_quote", stdout=io.StringIO())
+
+        order = Order.objects.get(order_number="DEV-CHECKOUT-0001")
+        self.assertTrue(order.is_dev_data)
+        self.assertEqual(order.confirmation_status, Order.ConfirmationStatus.PROPOSED)
+        self.assertEqual(order.quote_decision, Order.QuoteDecision.PENDING)
+        self.assertGreater(order.quote_valid_until, timezone.now())
+        self.assertEqual(order.agreed_amount, order.service_subtotal)
+        self.assertEqual(order.deposit_amount + order.final_amount, order.agreed_amount)
+        self.assertEqual(
+            OrderSerializer(order).data["available_actions"],
+            ["accept_quote", "reject_quote"],
+        )
+
+    @override_settings(DEBUG=True, ENVIRONMENT="development")
+    def test_prepare_checkout_dev_quote_refuses_real_order_collision(self):
+        real_user = User.objects.create_user(
+            username="real-customer",
+            password="not-used",
+            role=User.Role.CUSTOMER,
+            must_change_password=False,
+        )
+        real_profile = CustomerProfile.objects.create(user=real_user, display_name="Real customer")
+        Order.objects.create(
+            order_number="DEV-CHECKOUT-0001",
+            customer=real_profile,
+            order_type="Real order must be kept",
+            confirmation_status=Order.ConfirmationStatus.PROPOSED,
+            agreed_amount="1250.00",
+            is_dev_data=False,
+        )
+        call_command("seed_dev_data", stdout=io.StringIO())
+
+        with self.assertRaises(CommandError):
+            call_command("prepare_checkout_dev_quote", stdout=io.StringIO())

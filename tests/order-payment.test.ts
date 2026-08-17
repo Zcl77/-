@@ -66,6 +66,26 @@ describe('order payment presentation', () => {
     });
   });
 
+  it('shows quote decision buttons only for valid pending proposed orders', () => {
+    const now = Date.parse('2026-08-17T00:00:00Z');
+    const pendingQuote = orderFixture({
+      confirmationStatus: 'proposed',
+      quoteDecision: 'pending',
+      quoteValidUntil: '2026-08-18T00:00:00Z',
+      availableActions: [],
+    });
+
+    expect(getOrderUiActions(pendingQuote, now).canDecide).toBe(true);
+    expect(
+      getOrderUiActions({ ...pendingQuote, quoteValidUntil: '2026-08-16T00:00:00Z' }, now).canDecide,
+    ).toBe(false);
+    expect(getOrderUiActions({ ...pendingQuote, quoteDecision: 'accepted' }, now).canDecide).toBe(false);
+    expect(getOrderUiActions({ ...pendingQuote, quoteDecision: 'rejected' }, now).canDecide).toBe(false);
+    expect(getOrderUiActions({ ...pendingQuote, confirmationStatus: 'confirmed' }, now).canDecide).toBe(
+      false,
+    );
+  });
+
   it('updates the matching order immediately after each API response', () => {
     const first = orderFixture();
     const second = orderFixture({ id: 'order-2', orderNumber: 'ZX-TEST-002' });
