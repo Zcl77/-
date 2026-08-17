@@ -1,4 +1,4 @@
-import { Clock3, Gauge, ListTree } from 'lucide-react';
+import { Clock3, Gauge, ListTree, ShoppingBag } from 'lucide-react';
 import { Project } from '../../types';
 import SmartImage from '../ui/SmartImage';
 import { useI18n } from '../../i18n';
@@ -8,6 +8,7 @@ interface GalleryProjectSidebarProps {
   projects: Project[];
   selectedCategory: string | null;
   onSelectProject: (project: Project) => void;
+  onAddToCart: (project: Project) => void;
 }
 
 const STATUS_LABELS: Record<Project['status'], string> = {
@@ -27,6 +28,7 @@ export default function GalleryProjectSidebar({
   projects,
   selectedCategory,
   onSelectProject,
+  onAddToCart,
 }: GalleryProjectSidebarProps) {
   const { t } = useI18n();
   return (
@@ -112,6 +114,14 @@ export default function GalleryProjectSidebar({
               </ol>
             </div>
           )}
+          <button
+            type="button"
+            className="button-primary mt-6 w-full"
+            onClick={() => onAddToCart(selectedProject)}
+          >
+            <ShoppingBag className="h-4 w-4" />
+            {t('加入购物车')}
+          </button>
         </section>
 
         <section className="mt-8" aria-labelledby="project-index">

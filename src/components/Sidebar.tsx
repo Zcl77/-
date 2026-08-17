@@ -1,4 +1,4 @@
-import { BookOpenText, Images, MessageSquareText, UserRound } from 'lucide-react';
+import { BookOpenText, Images, MessageSquareText, ShoppingBag, UserRound } from 'lucide-react';
 import { useI18n } from '../i18n';
 import LanguageSwitcher from './ui/LanguageSwitcher';
 
@@ -8,6 +8,8 @@ interface SidebarProps {
   activeTab: AppTab;
   onNavigate: (tab: AppTab) => void;
   accountLabel: string;
+  cartCount: number;
+  onOpenCart: () => void;
 }
 
 const BASE_ITEMS: Array<{
@@ -43,7 +45,13 @@ function BrandButton({ onClick, compact = false }: { onClick: () => void; compac
   );
 }
 
-export default function Sidebar({ activeTab, onNavigate, accountLabel }: SidebarProps) {
+export default function Sidebar({
+  activeTab,
+  onNavigate,
+  accountLabel,
+  cartCount,
+  onOpenCart,
+}: SidebarProps) {
   const { t } = useI18n();
   const items = [
     ...BASE_ITEMS.map((item) => ({ ...item, label: t(item.label), title: t(item.title) })),
@@ -76,6 +84,20 @@ export default function Sidebar({ activeTab, onNavigate, accountLabel }: Sidebar
             );
           })}
         </nav>
+        <button
+          type="button"
+          onClick={onOpenCart}
+          className="relative mt-4 flex min-h-14 w-full flex-col items-center justify-center gap-1 rounded-[4px] border border-studio-line text-[11px] text-studio-muted hover:bg-studio-raised hover:text-studio-ink"
+          title={t('询价购物车')}
+        >
+          <ShoppingBag className="h-4 w-4" aria-hidden="true" />
+          <span>{t('购物车')}</span>
+          {cartCount > 0 && (
+            <span className="absolute right-4 top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-studio-brass px-1 text-[9px] text-studio-canvas">
+              {cartCount}
+            </span>
+          )}
+        </button>
         <LanguageSwitcher />
         <p className="mt-3 text-center text-[9px] leading-4 text-studio-faint">
           {t('微缩建筑')}
@@ -87,6 +109,20 @@ export default function Sidebar({ activeTab, onNavigate, accountLabel }: Sidebar
       <header className="fixed inset-x-0 top-0 z-50 flex h-14 items-center justify-between border-b border-studio-line bg-studio-surface px-4 lg:hidden">
         <BrandButton compact onClick={() => onNavigate('gallery')} />
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onOpenCart}
+            className="relative icon-button"
+            title={t('询价购物车')}
+            aria-label={t('询价购物车')}
+          >
+            <ShoppingBag className="h-4 w-4" />
+            {cartCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-studio-brass px-1 text-[9px] text-studio-canvas">
+                {cartCount}
+              </span>
+            )}
+          </button>
           <LanguageSwitcher />
           <span className="hidden text-[10px] text-studio-faint sm:inline">
             {items.find((item) => item.id === activeTab)?.title}
