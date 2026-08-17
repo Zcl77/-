@@ -8,6 +8,7 @@ from media_library.serializers import serialize_media
 from .models import (
     ClientProject,
     Order,
+    OrderContactAddress,
     PaymentRecord,
     ProductionStage,
     ProgressImage,
@@ -40,9 +41,37 @@ class PaymentRecordSerializer(StrictModelSerializer):
         read_only_fields = fields
 
 
+class OrderContactAddressSerializer(StrictModelSerializer):
+    class Meta:
+        model = OrderContactAddress
+        fields = (
+            "recipient_name",
+            "email",
+            "phone",
+            "country_code",
+            "region",
+            "city",
+            "address_line",
+            "postal_code",
+        )
+
+    def validate_country_code(self, value):
+        normalized = value.strip().upper()
+        if len(normalized) != 2 or not normalized.isalpha():
+            raise serializers.ValidationError(
+                "国家或地区必须使用两个字母的 ISO 3166-1 代码。", code="invalid_country_code"
+            )
+        return normalized
+
+
+class CheckoutConfirmationSerializer(OrderContactAddressSerializer):
+    pass
+
+
 class OrderSerializer(StrictModelSerializer):
     payment_records = PaymentRecordSerializer(many=True, read_only=True)
     available_actions = serializers.SerializerMethodField()
+    contact_address = OrderContactAddressSerializer(read_only=True, allow_null=True)
 
     class Meta:
         model = Order
@@ -53,17 +82,24 @@ class OrderSerializer(StrictModelSerializer):
             "confirmation_status",
             "agreed_amount",
             "currency",
+            "service_subtotal",
+            "shipping_amount",
+            "tax_amount",
+            "discount_amount",
             "deposit_amount",
             "final_amount",
             "quoted_at",
             "quote_valid_until",
             "quote_decision",
             "quote_decision_at",
+            "checkout_status",
+            "checkout_confirmed_at",
             "payment_status",
             "deposit_status",
             "final_payment_status",
             "delivery_status",
             "payment_records",
+            "contact_address",
             "available_actions",
             "created_at",
             "updated_at",
@@ -80,6 +116,13 @@ class OrderSerializer(StrictModelSerializer):
         ):
             actions.extend(("accept_quote", "reject_quote"))
 
+        if (
+            obj.confirmation_status == Order.ConfirmationStatus.CONFIRMED
+            and obj.quote_decision == Order.QuoteDecision.ACCEPTED
+            and obj.checkout_status == Order.CheckoutStatus.PENDING
+        ):
+            actions.append("confirm_checkout")
+
         request = self.context.get("request")
         user = request.user if request is not None else obj.customer.user
         amount_configuration_valid = (
@@ -88,6 +131,7 @@ class OrderSerializer(StrictModelSerializer):
             and obj.deposit_amount >= 0
             and obj.final_amount >= 0
             and obj.deposit_amount + obj.final_amount == obj.agreed_amount
+            and obj.calculated_total == obj.agreed_amount
             and obj.currency == Order.Currency.CNY
         )
         if (
@@ -95,6 +139,7 @@ class OrderSerializer(StrictModelSerializer):
             and obj.is_mock_payment_eligible_for(user)
             and obj.confirmation_status == Order.ConfirmationStatus.CONFIRMED
             and obj.quote_decision == Order.QuoteDecision.ACCEPTED
+            and obj.checkout_status == Order.CheckoutStatus.CONFIRMED
             and amount_configuration_valid
         ):
             if obj.payment_status == Order.PaymentStatus.DEPOSIT_PENDING and obj.deposit_amount > 0:

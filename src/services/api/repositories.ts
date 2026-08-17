@@ -4,6 +4,7 @@ import {
   CustomerProject,
   CurrentUser,
   InquiryInput,
+  OrderContactAddress,
   MediaRenditions,
   ProductionStage,
   ProgressUpdateItem,
@@ -104,17 +105,33 @@ interface RawOrder {
   confirmation_status: CustomerOrder['confirmationStatus'];
   agreed_amount: string | null;
   currency: CustomerOrder['currency'];
+  service_subtotal: string;
+  shipping_amount: string;
+  tax_amount: string;
+  discount_amount: string;
   deposit_amount: string;
   final_amount: string;
   quoted_at: string | null;
   quote_valid_until: string | null;
   quote_decision: CustomerOrder['quoteDecision'];
   quote_decision_at: string | null;
+  checkout_status: CustomerOrder['checkoutStatus'];
+  checkout_confirmed_at: string | null;
   payment_status: CustomerOrder['paymentStatus'];
   deposit_status: CustomerOrder['depositStatus'];
   final_payment_status: CustomerOrder['finalPaymentStatus'];
   delivery_status: CustomerOrder['deliveryStatus'];
   payment_records: RawPaymentRecord[];
+  contact_address: {
+    recipient_name: string;
+    email: string;
+    phone: string;
+    country_code: string;
+    region: string;
+    city: string;
+    address_line: string;
+    postal_code: string;
+  } | null;
   available_actions: CustomerOrder['availableActions'];
   created_at: string;
   updated_at: string;
@@ -262,12 +279,18 @@ function mapOrder(order: RawOrder): CustomerOrder {
     confirmationStatus: order.confirmation_status,
     agreedAmount: order.agreed_amount,
     currency: order.currency,
+    serviceSubtotal: order.service_subtotal,
+    shippingAmount: order.shipping_amount,
+    taxAmount: order.tax_amount,
+    discountAmount: order.discount_amount,
     depositAmount: order.deposit_amount,
     finalAmount: order.final_amount,
     quotedAt: order.quoted_at,
     quoteValidUntil: order.quote_valid_until,
     quoteDecision: order.quote_decision,
     quoteDecisionAt: order.quote_decision_at,
+    checkoutStatus: order.checkout_status,
+    checkoutConfirmedAt: order.checkout_confirmed_at,
     paymentStatus: order.payment_status,
     depositStatus: order.deposit_status,
     finalPaymentStatus: order.final_payment_status,
@@ -283,6 +306,18 @@ function mapOrder(order: RawOrder): CustomerOrder {
       paidAt: payment.paid_at,
       createdAt: payment.created_at,
     })),
+    contactAddress: order.contact_address
+      ? {
+          recipientName: order.contact_address.recipient_name,
+          email: order.contact_address.email,
+          phone: order.contact_address.phone,
+          countryCode: order.contact_address.country_code,
+          region: order.contact_address.region,
+          city: order.contact_address.city,
+          addressLine: order.contact_address.address_line,
+          postalCode: order.contact_address.postal_code,
+        }
+      : null,
     availableActions: order.available_actions,
     createdAt: order.created_at,
     updatedAt: order.updated_at,
@@ -444,6 +479,27 @@ export async function mockPayOrder(orderId: string, paymentType: 'deposit' | 'fi
     body: JSON.stringify({ payment_type: paymentType }),
   });
   return { order: mapOrder(response.order), created: response.created, message: response.message };
+}
+
+export async function confirmOrderCheckout(orderId: string, address: OrderContactAddress) {
+  const response = await apiRequest<{ order: RawOrder; changed: boolean; message: string }>(
+    `/me/orders/${orderId}/checkout-confirmation`,
+    {
+      method: 'POST',
+      headers: { 'Idempotency-Key': `checkout:${orderId}` },
+      body: JSON.stringify({
+        recipient_name: address.recipientName,
+        email: address.email,
+        phone: address.phone,
+        country_code: address.countryCode,
+        region: address.region,
+        city: address.city,
+        address_line: address.addressLine,
+        postal_code: address.postalCode,
+      }),
+    },
+  );
+  return { order: mapOrder(response.order), changed: response.changed, message: response.message };
 }
 
 export async function getMyProjects(): Promise<CustomerProject[]> {

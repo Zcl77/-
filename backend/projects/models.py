@@ -50,6 +50,11 @@ class Order(UUIDTimeStampedModel):
         CANCELLED = "cancelled", "已取消"
         REFUNDED = "refunded", "已退款"
 
+    class CheckoutStatus(models.TextChoices):
+        NOT_STARTED = "not_started", "未开始结账"
+        PENDING = "pending", "待客户确认"
+        CONFIRMED = "confirmed", "客户已确认"
+
     order_number = models.CharField("订单编号", max_length=64, unique=True)
     customer = models.ForeignKey(CustomerProfile, verbose_name="客户", on_delete=models.PROTECT, related_name="orders")
     order_type = models.CharField("订单类型", max_length=80)
@@ -61,6 +66,10 @@ class Order(UUIDTimeStampedModel):
     )
     agreed_amount = models.DecimalField("订单金额（报价）", max_digits=12, decimal_places=2, null=True, blank=True)
     currency = models.CharField("币种", max_length=3, choices=Currency.choices, default=Currency.CNY)
+    service_subtotal = models.DecimalField("商品或服务小计", max_digits=12, decimal_places=2, default=0)
+    shipping_amount = models.DecimalField("运费", max_digits=12, decimal_places=2, default=0)
+    tax_amount = models.DecimalField("税费", max_digits=12, decimal_places=2, default=0)
+    discount_amount = models.DecimalField("折扣", max_digits=12, decimal_places=2, default=0)
     deposit_amount = models.DecimalField("定金金额", max_digits=12, decimal_places=2, default=0)
     final_amount = models.DecimalField("尾款金额", max_digits=12, decimal_places=2, default=0)
     quoted_at = models.DateTimeField("报价时间", null=True, blank=True)
@@ -72,6 +81,10 @@ class Order(UUIDTimeStampedModel):
         default=QuoteDecision.NONE,
     )
     quote_decision_at = models.DateTimeField("客户决定时间", null=True, blank=True)
+    checkout_status = models.CharField(
+        "结账状态", max_length=16, choices=CheckoutStatus.choices, default=CheckoutStatus.NOT_STARTED
+    )
+    checkout_confirmed_at = models.DateTimeField("结账确认时间", null=True, blank=True)
     payment_status = models.CharField(
         "付款状态",
         max_length=24,
@@ -110,6 +123,18 @@ class Order(UUIDTimeStampedModel):
             ),
             models.CheckConstraint(condition=Q(deposit_amount__gte=0), name="projects_order_deposit_nonnegative"),
             models.CheckConstraint(condition=Q(final_amount__gte=0), name="projects_order_final_nonnegative"),
+            models.CheckConstraint(condition=Q(service_subtotal__gte=0), name="projects_order_subtotal_nonnegative"),
+            models.CheckConstraint(condition=Q(shipping_amount__gte=0), name="projects_order_shipping_nonnegative"),
+            models.CheckConstraint(condition=Q(tax_amount__gte=0), name="projects_order_tax_nonnegative"),
+            models.CheckConstraint(condition=Q(discount_amount__gte=0), name="projects_order_discount_nonnegative"),
+            models.CheckConstraint(
+                condition=Q(
+                    discount_amount__lte=(
+                        models.F("service_subtotal") + models.F("shipping_amount") + models.F("tax_amount")
+                    )
+                ),
+                name="projects_order_discount_within_charges",
+            ),
             models.CheckConstraint(
                 condition=Q(currency__in=("CNY", "USD")),
                 name="projects_order_currency_iso_supported",
@@ -123,10 +148,33 @@ class Order(UUIDTimeStampedModel):
             ),
         ]
 
+    @property
+    def calculated_total(self):
+        return (
+            Decimal(str(self.service_subtotal))
+            + Decimal(str(self.shipping_amount))
+            + Decimal(str(self.tax_amount))
+            - Decimal(str(self.discount_amount))
+        )
+
     def _prepare_amounts(self):
         if self.agreed_amount is None:
             return set()
+        derived = set()
         agreed_amount = Decimal(str(self.agreed_amount))
+        components = (
+            Decimal(str(self.service_subtotal)),
+            Decimal(str(self.shipping_amount)),
+            Decimal(str(self.tax_amount)),
+            Decimal(str(self.discount_amount)),
+        )
+        if components == (Decimal("0"), Decimal("0"), Decimal("0"), Decimal("0")):
+            self.service_subtotal = agreed_amount
+            derived.add("service_subtotal")
+        else:
+            agreed_amount = self.calculated_total
+            self.agreed_amount = agreed_amount
+            derived.add("agreed_amount")
         deposit_amount = Decimal(str(self.deposit_amount))
         final_amount = Decimal(str(self.final_amount))
         self.agreed_amount = agreed_amount
@@ -134,7 +182,7 @@ class Order(UUIDTimeStampedModel):
         self.final_amount = final_amount
         if final_amount == 0 and deposit_amount <= agreed_amount:
             self.final_amount = agreed_amount - deposit_amount
-            return {"final_amount"}
+            return derived | {"final_amount"}
         if not self.pk or self._state.adding:
             return set()
         previous = type(self).objects.filter(pk=self.pk).values(
@@ -149,8 +197,8 @@ class Order(UUIDTimeStampedModel):
             and previous["deposit_amount"] + previous["final_amount"] == previous["agreed_amount"]
         ):
             self.final_amount = self.agreed_amount - self.deposit_amount
-            return {"final_amount"}
-        return set()
+            return derived | {"final_amount"}
+        return derived
 
     def _prepare_quote_state(self):
         if self.confirmation_status != self.ConfirmationStatus.PROPOSED:
@@ -171,6 +219,15 @@ class Order(UUIDTimeStampedModel):
 
     def clean(self):
         self._prepare_amounts()
+        if any(
+            amount < 0
+            for amount in (self.service_subtotal, self.shipping_amount, self.tax_amount, self.discount_amount)
+        ):
+            raise ValidationError("订单金额构成不能为负数。")
+        if self.discount_amount > self.service_subtotal + self.shipping_amount + self.tax_amount:
+            raise ValidationError({"discount_amount": "折扣不能超过小计、运费与税费合计。"})
+        if self.agreed_amount is not None and self.calculated_total != self.agreed_amount:
+            raise ValidationError({"agreed_amount": "最终应付总额与订单金额构成不一致。"})
         if self.agreed_amount is None and (self.deposit_amount or self.final_amount):
             raise ValidationError({"agreed_amount": "填写定金或尾款前必须先填写订单金额。"})
         if self.agreed_amount is not None and self.deposit_amount + self.final_amount != self.agreed_amount:
@@ -198,6 +255,32 @@ class Order(UUIDTimeStampedModel):
             and self.customer.user_id == user.pk
             and user.is_dev_data
         )
+
+
+class OrderContactAddress(UUIDTimeStampedModel):
+    order = models.OneToOneField(
+        Order, verbose_name="订单", on_delete=models.PROTECT, related_name="contact_address"
+    )
+    recipient_name = models.CharField("收件人姓名", max_length=120)
+    email = models.EmailField("邮箱", max_length=254)
+    phone = models.CharField("联系电话", max_length=40)
+    country_code = models.CharField("国家或地区代码", max_length=2)
+    region = models.CharField("州/省", max_length=120, blank=True)
+    city = models.CharField("城市", max_length=120)
+    address_line = models.CharField("详细地址", max_length=500)
+    postal_code = models.CharField("邮编", max_length=32)
+
+    class Meta:
+        verbose_name = "订单联系与收货信息"
+        verbose_name_plural = "订单联系与收货信息"
+
+    def clean(self):
+        self.country_code = self.country_code.strip().upper()
+        if len(self.country_code) != 2 or not self.country_code.isalpha():
+            raise ValidationError({"country_code": "国家或地区必须使用两个字母的 ISO 3166-1 代码。"})
+
+    def __str__(self):
+        return f"{self.order.order_number} / {self.recipient_name}"
 
 
 class PaymentRecord(UUIDTimeStampedModel):

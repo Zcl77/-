@@ -6,6 +6,7 @@ from django.utils import timezone
 from .models import (
     ClientProject,
     Order,
+    OrderContactAddress,
     PaymentRecord,
     ProductionStage,
     ProgressImage,
@@ -75,6 +76,25 @@ class PaymentRecordInline(admin.TabularInline):
     can_delete = False
 
 
+class OrderContactAddressInline(admin.StackedInline):
+    model = OrderContactAddress
+    extra = 0
+    max_num = 1
+    fields = (
+        "recipient_name",
+        "email",
+        "phone",
+        "country_code",
+        "region",
+        "city",
+        "address_line",
+        "postal_code",
+        "created_at",
+        "updated_at",
+    )
+    readonly_fields = ("created_at", "updated_at")
+
+
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
     list_display = (
@@ -82,6 +102,11 @@ class OrderAdmin(admin.ModelAdmin):
         "customer",
         "order_type",
         "confirmation_status",
+        "checkout_status",
+        "service_subtotal",
+        "shipping_amount",
+        "tax_amount",
+        "discount_amount",
         "agreed_amount",
         "currency",
         "deposit_amount",
@@ -92,35 +117,70 @@ class OrderAdmin(admin.ModelAdmin):
         "final_payment_status",
         "customer_projects",
         "delivery_status",
+        "shipping_country",
         "updated_at",
     )
-    list_filter = ("confirmation_status", "quote_decision", "payment_status", "delivery_status", "is_dev_data")
-    search_fields = ("order_number", "customer__display_name", "order_type")
+    list_filter = (
+        "confirmation_status",
+        "checkout_status",
+        "quote_decision",
+        "payment_status",
+        "delivery_status",
+        "currency",
+        "is_dev_data",
+    )
+    search_fields = (
+        "order_number",
+        "customer__display_name",
+        "order_type",
+        "contact_address__recipient_name",
+        "contact_address__email",
+        "contact_address__country_code",
+    )
     autocomplete_fields = ("customer",)
     readonly_fields = (
         "quoted_at",
         "quote_decision",
         "quote_decision_at",
+        "checkout_status",
+        "checkout_confirmed_at",
         "payment_status",
         "deposit_status",
         "final_payment_status",
         "created_at",
         "updated_at",
     )
-    inlines = (PaymentRecordInline,)
+    inlines = (OrderContactAddressInline, PaymentRecordInline)
 
     def get_queryset(self, request):
-        return super().get_queryset(request).prefetch_related("projects")
+        return super().get_queryset(request).select_related("contact_address").prefetch_related("projects")
 
     def get_readonly_fields(self, request, obj=None):
         readonly = list(super().get_readonly_fields(request, obj))
         if obj is not None and obj.payment_records.exists():
-            readonly.extend(("agreed_amount", "currency", "deposit_amount", "final_amount", "confirmation_status"))
+            readonly.extend(
+                (
+                    "service_subtotal",
+                    "shipping_amount",
+                    "tax_amount",
+                    "discount_amount",
+                    "agreed_amount",
+                    "currency",
+                    "deposit_amount",
+                    "final_amount",
+                    "confirmation_status",
+                )
+            )
         return tuple(readonly)
 
     @admin.display(description="客户项目")
     def customer_projects(self, obj):
         return "、".join(project.name for project in obj.projects.all()) or "未关联"
+
+    @admin.display(description="收货国家/地区", ordering="contact_address__country_code")
+    def shipping_country(self, obj):
+        address = getattr(obj, "contact_address", None)
+        return address.country_code if address else "未填写"
 
 
 @admin.register(ClientProject)

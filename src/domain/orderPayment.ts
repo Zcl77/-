@@ -13,9 +13,13 @@ export function paymentPartStatus(value: CustomerOrder['depositStatus']) {
   return '未记录';
 }
 
-export function getOrderUiActions(order: CustomerOrder) {
+export function getOrderUiActions(order: CustomerOrder, now = Date.now()) {
+  const quoteStillValid = !order.quoteValidUntil || Date.parse(order.quoteValidUntil) >= now;
+  const canDecideFromState =
+    order.confirmationStatus === 'proposed' && order.quoteDecision === 'pending' && quoteStillValid;
   const canDecide =
-    order.availableActions.includes('accept_quote') && order.availableActions.includes('reject_quote');
+    (order.availableActions.includes('accept_quote') && order.availableActions.includes('reject_quote')) ||
+    canDecideFromState;
   const mockPaymentType = order.availableActions.includes('mock_pay_deposit')
     ? 'deposit'
     : order.availableActions.includes('mock_pay_final')

@@ -141,6 +141,17 @@ export interface CustomerPaymentRecord {
   createdAt: string;
 }
 
+export interface OrderContactAddress {
+  recipientName: string;
+  email: string;
+  phone: string;
+  countryCode: string;
+  region: string;
+  city: string;
+  addressLine: string;
+  postalCode: string;
+}
+
 export interface CustomerOrder {
   id: string;
   orderNumber: string;
@@ -148,19 +159,28 @@ export interface CustomerOrder {
   confirmationStatus: 'inquiry' | 'proposed' | 'confirmed' | 'cancelled';
   agreedAmount: string | null;
   currency: 'CNY' | 'USD';
+  serviceSubtotal: string;
+  shippingAmount: string;
+  taxAmount: string;
+  discountAmount: string;
   depositAmount: string;
   finalAmount: string;
   quotedAt: string | null;
   quoteValidUntil: string | null;
   quoteDecision: 'none' | 'pending' | 'accepted' | 'rejected';
   quoteDecisionAt: string | null;
+  checkoutStatus: 'not_started' | 'pending' | 'confirmed';
+  checkoutConfirmedAt: string | null;
   paymentStatus:
     'unpaid' | 'deposit_pending' | 'deposit_paid' | 'final_pending' | 'paid' | 'cancelled' | 'refunded';
   depositStatus: 'not_recorded' | 'pending' | 'recorded' | 'waived';
   finalPaymentStatus: 'not_recorded' | 'pending' | 'recorded' | 'waived';
   deliveryStatus: 'not_ready' | 'ready' | 'delivered';
   paymentRecords: CustomerPaymentRecord[];
-  availableActions: Array<'accept_quote' | 'reject_quote' | 'mock_pay_deposit' | 'mock_pay_final'>;
+  contactAddress: OrderContactAddress | null;
+  availableActions: Array<
+    'accept_quote' | 'reject_quote' | 'confirm_checkout' | 'mock_pay_deposit' | 'mock_pay_final'
+  >;
   createdAt: string;
   updatedAt: string;
 }
