@@ -9,6 +9,7 @@ import {
   Expand,
   Images,
   Ruler,
+  ShoppingBag,
   Users,
   X,
 } from 'lucide-react';
@@ -299,6 +300,14 @@ export default function GalleryView({
                       </span>
                     )}
                   </div>
+                  <button
+                    type="button"
+                    className="button-primary mt-4 w-full"
+                    onClick={() => onAddToCart(selectedProject)}
+                  >
+                    <ShoppingBag className="h-4 w-4" />
+                    {t('加入购物车')}
+                  </button>
                   <div
                     className={`mt-4 grid ${selectedProject.timeSpent === undefined ? 'grid-cols-1' : 'grid-cols-2'} border-y border-studio-line py-3 text-xs`}
                   >
