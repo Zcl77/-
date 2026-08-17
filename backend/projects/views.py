@@ -27,6 +27,7 @@ from .models import (
 )
 from .serializers import (
     OrderSerializer,
+    CheckoutConfirmationSerializer,
     MockPaymentSerializer,
     PaymentRecordSerializer,
     ProductionStageSerializer,
@@ -37,7 +38,7 @@ from .serializers import (
     ProjectSummarySerializer,
     QuoteDecisionSerializer,
 )
-from .services import decide_quote, record_mock_payment
+from .services import confirm_checkout, decide_quote, record_mock_payment
 
 
 PRIVATE_PERMISSIONS = [IsAuthenticated, HasCompletedPasswordChange, IsCustomerOrStaff]
@@ -103,9 +104,41 @@ class OrderListView(PrivateListView):
     def get_queryset(self):
         return (
             accessible_orders(self.request.user)
-            .select_related("customer", "customer__user")
+            .select_related("customer", "customer__user", "contact_address")
             .prefetch_related("payment_records")
             .order_by("-created_at")
+        )
+
+
+@method_decorator([never_cache, csrf_protect], name="dispatch")
+class CheckoutConfirmationView(APIView):
+    permission_classes = PRIVATE_PERMISSIONS
+    throttle_scope = "quote-decision"
+
+    def post(self, request, order_id):
+        if request.user.is_staff:
+            raise PermissionDenied("工作室账号不能代替客户确认结账。")
+        get_object_or_404(accessible_orders(request.user), pk=order_id)
+        serializer = CheckoutConfirmationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            order, changed = confirm_checkout(
+                order_id=order_id,
+                customer_user=request.user,
+                address_data=serializer.validated_data,
+            )
+        except Exception as exc:
+            from django.core.exceptions import ValidationError as DjangoValidationError
+
+            if isinstance(exc, DjangoValidationError):
+                raise api_validation_error(exc) from exc
+            raise
+        return Response(
+            {
+                "order": OrderSerializer(order, context={"request": request}).data,
+                "changed": changed,
+                "message": "结账信息已确认。" if changed else "结账信息已经确认，无需重复提交。",
+            }
         )
 
 

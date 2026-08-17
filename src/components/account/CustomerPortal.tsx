@@ -1,18 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowRight, BriefcaseBusiness, Check, LogOut, RefreshCw, Settings2, X } from 'lucide-react';
-import { decideQuote, getMyOrders, getMyProjects, mockPayOrder } from '../../services/api/repositories';
+import {
+  confirmOrderCheckout,
+  decideQuote,
+  getMyOrders,
+  getMyProjects,
+  mockPayOrder,
+} from '../../services/api/repositories';
 import { LatestRequestGate, useVisiblePolling } from '../../hooks/useVisiblePolling';
 import { getOrderUiActions, replaceOrder } from '../../domain/orderPayment';
 import { AuthenticatedUser, CustomerOrder, CustomerProject } from '../../types';
 import StatusNotice from '../ui/StatusNotice';
 import CustomerProjectDetail from './CustomerProjectDetail';
 import PasswordChangePanel from './PasswordChangePanel';
+import CheckoutPanel from './CheckoutPanel';
 import { useI18n } from '../../i18n';
 
 interface CustomerPortalProps {
   user: AuthenticatedUser;
   selectedProjectId: string | null;
+  selectedOrderId: string | null;
   onOpenProject: (projectId: string) => void;
+  onOpenCheckout: (orderId: string) => void;
   onBackToProjects: () => void;
   onLogout: () => Promise<void>;
   onChangePassword: (currentPassword: string, newPassword: string) => Promise<unknown>;
@@ -60,7 +69,9 @@ const PAYMENT_TYPE: Record<CustomerOrder['paymentRecords'][number]['paymentType'
 export default function CustomerPortal({
   user,
   selectedProjectId,
+  selectedOrderId,
   onOpenProject,
+  onOpenCheckout,
   onBackToProjects,
   onLogout,
   onChangePassword,
@@ -207,6 +218,18 @@ export default function CustomerPortal({
       setLoggingOut(false);
     }
   };
+  const selectedOrder = orders.find((order) => order.id === selectedOrderId) || null;
+
+  const submitCheckout = async (orderId: string, address: Parameters<typeof confirmOrderCheckout>[1]) => {
+    try {
+      const result = await confirmOrderCheckout(orderId, address);
+      setOrders((current) => replaceOrder(current, result.order));
+      await load(true).catch(() => undefined);
+      return result.changed;
+    } catch (reason) {
+      throw new Error(errorMessage(reason, '结账确认失败，请稍后重试。'), { cause: reason });
+    }
+  };
 
   return (
     <div className="page-shell">
@@ -255,6 +278,20 @@ export default function CustomerPortal({
               {t('进入管理后台')}
             </a>
           </section>
+        ) : selectedOrderId && status === 'ready' && selectedOrder ? (
+          <CheckoutPanel order={selectedOrder} onBack={onBackToProjects} onConfirm={submitCheckout} />
+        ) : selectedOrderId ? (
+          <StatusNotice
+            tone={status === 'error' || status === 'ready' ? 'error' : 'loading'}
+            title={t(status === 'error' || status === 'ready' ? '结账页面无法打开' : '正在读取结账信息')}
+            description={
+              status === 'error'
+                ? error || undefined
+                : status === 'ready'
+                  ? t('订单不存在或当前账号无权查看。')
+                  : t('正在核对订单权限与金额。')
+            }
+          />
         ) : selectedProjectId ? (
           <CustomerProjectDetail projectId={selectedProjectId} onBack={onBackToProjects} />
         ) : (
@@ -350,6 +387,7 @@ export default function CustomerPortal({
                     const { canDecide, mockPaymentType } = getOrderUiActions(order);
                     const canPayDeposit = mockPaymentType === 'deposit';
                     const canPayFinal = mockPaymentType === 'final';
+                    const canCheckout = order.availableActions.includes('confirm_checkout');
                     const paying = paymentAction?.orderId === order.id;
                     return (
                       <article
@@ -427,6 +465,16 @@ export default function CustomerPortal({
                               {t(deciding && quoteAction?.decision === 'rejected' ? '正在拒绝' : '拒绝报价')}
                             </button>
                           </div>
+                        )}
+                        {canCheckout && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenCheckout(order.id)}
+                            className="button-primary mt-4 w-full"
+                          >
+                            {t('进入结账确认')}
+                            <ArrowRight className="ml-auto h-4 w-4" />
+                          </button>
                         )}
                         {(canPayDeposit || canPayFinal) && (
                           <div className="mt-4 border-t border-studio-line pt-4">

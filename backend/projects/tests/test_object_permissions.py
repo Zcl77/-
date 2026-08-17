@@ -246,10 +246,12 @@ class CustomerObjectPermissionTests(TransactionTestCase):
         )
 
         quote_url = f"/api/v1/me/orders/{quote.pk}/quote-decision"
+        checkout_url = f"/api/v1/me/orders/{quote.pk}/checkout-confirmation"
         payment_url = f"/api/v1/me/orders/{quote.pk}/mock-payment"
         message_url = f"/api/v1/me/projects/{self.project_b.pk}/messages"
         acknowledge_url = f"/api/v1/me/projects/{self.project_b.pk}/updates/{self.update_b.pk}/acknowledge"
         self.assertEqual(client.post(quote_url, {"decision": "accepted"}, format="json").status_code, 403)
+        self.assertEqual(client.post(checkout_url, {}, format="json").status_code, 403)
         self.assertEqual(client.post(payment_url, {"payment_type": "final"}, format="json").status_code, 403)
         self.assertEqual(client.post(message_url, {"body": "缺少 CSRF"}, format="json").status_code, 403)
         self.assertEqual(client.post(acknowledge_url, format="json").status_code, 403)

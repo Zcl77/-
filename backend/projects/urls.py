@@ -10,12 +10,18 @@ from .views import (
     ProjectStageListView,
     ProjectUpdateListView,
     QuoteDecisionView,
+    CheckoutConfirmationView,
 )
 
 
 urlpatterns = [
     path("me/orders", OrderListView.as_view(), name="my-orders"),
     path("me/orders/<uuid:order_id>/quote-decision", QuoteDecisionView.as_view(), name="my-order-quote-decision"),
+    path(
+        "me/orders/<uuid:order_id>/checkout-confirmation",
+        CheckoutConfirmationView.as_view(),
+        name="my-order-checkout-confirmation",
+    ),
     path("me/orders/<uuid:order_id>/mock-payment", MockPaymentView.as_view(), name="my-order-mock-payment"),
     path("me/projects", ProjectListView.as_view(), name="my-projects"),
     path("me/projects/<uuid:project_id>", ProjectDetailView.as_view(), name="my-project-detail"),

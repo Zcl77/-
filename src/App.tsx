@@ -137,7 +137,9 @@ export default function App() {
       <CustomerPortal
         user={auth.user}
         selectedProjectId={route.projectId}
+        selectedOrderId={route.orderId}
         onOpenProject={(projectId) => navigate(`/my-projects/${projectId}`)}
+        onOpenCheckout={(orderId) => navigate(`/my-projects/orders/${orderId}/checkout`)}
         onBackToProjects={() => navigate('/my-projects')}
         onLogout={async () => {
           await auth.logout();

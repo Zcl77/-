@@ -17,6 +17,7 @@ describe('route parsing', () => {
       tab: 'gallery',
       workSlug: '张园',
       projectId: null,
+      orderId: null,
       found: true,
     });
   });
@@ -26,6 +27,17 @@ describe('route parsing', () => {
       tab: 'account',
       workSlug: null,
       projectId: '550e8400-e29b-41d4-a716-446655440000',
+      orderId: null,
+      found: true,
+    });
+  });
+
+  it('recognizes the private checkout route', () => {
+    expect(parseRoute('/my-projects/orders/550e8400-e29b-41d4-a716-446655440000/checkout')).toEqual({
+      tab: 'account',
+      workSlug: null,
+      projectId: null,
+      orderId: '550e8400-e29b-41d4-a716-446655440000',
       found: true,
     });
   });

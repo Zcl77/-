@@ -12,12 +12,30 @@ from rest_framework.test import APIClient
 
 from accounts.models import CustomerProfile, User
 from common.tests.utils import TEST_PASSWORD
-from projects.admin import OrderAdmin, PaymentRecordAdmin, ProjectMembershipInlineFormSet
-from projects.models import ClientProject, Order, PaymentRecord, ProductionStage, ProgressUpdate, ProjectMembership
+from projects.admin import OrderAdmin, OrderContactAddressInline, PaymentRecordAdmin, ProjectMembershipInlineFormSet
+from projects.models import (
+    ClientProject,
+    Order,
+    OrderContactAddress,
+    PaymentRecord,
+    ProductionStage,
+    ProgressUpdate,
+    ProjectMembership,
+)
 from projects.services import ensure_project_scaffold
 
 
 class OrderWorkflowTests(TransactionTestCase):
+    checkout_payload = {
+        "recipient_name": "测试客户",
+        "email": "customer@example.test",
+        "phone": "+86 13800000000",
+        "country_code": "cn",
+        "region": "上海",
+        "city": "上海",
+        "address_line": "测试路 1 号",
+        "postal_code": "200000",
+    }
     def setUp(self):
         self.staff = User.objects.create_superuser(
             username="order-admin",
@@ -56,6 +74,13 @@ class OrderWorkflowTests(TransactionTestCase):
         order.is_dev_data = True
         order.save(update_fields=["is_dev_data", "updated_at"])
 
+    def confirm_checkout(self, client, order, payload=None):
+        return client.post(
+            f"/api/v1/me/orders/{order.pk}/checkout-confirmation",
+            payload or self.checkout_payload,
+            format="json",
+        )
+
     def test_customer_accepts_quote_once_and_project_is_created(self):
         order = self.proposed_order(self.profile_a)
         client = APIClient()
@@ -68,7 +93,9 @@ class OrderWorkflowTests(TransactionTestCase):
         order.refresh_from_db()
         self.assertEqual(order.confirmation_status, Order.ConfirmationStatus.CONFIRMED)
         self.assertEqual(order.quote_decision, Order.QuoteDecision.ACCEPTED)
-        self.assertEqual(order.payment_status, Order.PaymentStatus.FINAL_PENDING)
+        self.assertEqual(order.payment_status, Order.PaymentStatus.UNPAID)
+        self.assertEqual(order.checkout_status, Order.CheckoutStatus.PENDING)
+        self.assertEqual(response.json()["order"]["available_actions"], ["confirm_checkout"])
         self.assertEqual(order.final_amount, Decimal("12888.50"))
         self.assertIsNotNone(order.quote_decision_at)
         project = order.projects.get()
@@ -109,6 +136,32 @@ class OrderWorkflowTests(TransactionTestCase):
         order.refresh_from_db()
         self.assertEqual(order.deposit_amount + order.final_amount, order.agreed_amount)
         self.assertEqual(order.currency, Order.Currency.CNY)
+        self.assertEqual(order.service_subtotal, Decimal("1000.10"))
+
+    def test_cny_and_usd_checkout_totals_are_calculated_with_decimal(self):
+        for currency in (Order.Currency.CNY, Order.Currency.USD):
+            order = Order(
+                order_number=f"TOTAL-{currency}",
+                customer=self.profile_a,
+                order_type="国际订单",
+                confirmation_status=Order.ConfirmationStatus.PROPOSED,
+                agreed_amount=Decimal("110.17"),
+                service_subtotal=Decimal("100.10"),
+                shipping_amount=Decimal("8.07"),
+                tax_amount=Decimal("5.00"),
+                discount_amount=Decimal("3.00"),
+                deposit_amount=Decimal("30.03"),
+                final_amount=Decimal("80.14"),
+                currency=currency,
+            )
+            order.full_clean()
+            self.assertEqual(order.calculated_total, Decimal("110.17"))
+
+    def test_invalid_checkout_amount_components_are_rejected(self):
+        order = self.proposed_order(self.profile_a, "TOTAL-INVALID")
+        order.shipping_amount = Decimal("-0.01")
+        with self.assertRaises(ValidationError):
+            order.full_clean()
 
     @override_settings(MOCK_PAYMENTS_ENABLED=True)
     def test_deposit_and_final_mock_payments_advance_order_status(self):
@@ -130,9 +183,19 @@ class OrderWorkflowTests(TransactionTestCase):
 
         quote = client.post(quote_url, {"decision": "accepted"}, format="json")
         self.assertEqual(quote.status_code, 200)
-        self.assertEqual(quote.json()["order"]["available_actions"], ["mock_pay_deposit"])
+        self.assertEqual(quote.json()["order"]["available_actions"], ["confirm_checkout"])
+        checkout = self.confirm_checkout(client, order)
+        self.assertEqual(checkout.status_code, 200)
+        self.assertTrue(checkout.json()["changed"])
+        self.assertEqual(checkout.json()["order"]["available_actions"], ["mock_pay_deposit"])
         order.refresh_from_db()
         self.assertEqual(order.payment_status, Order.PaymentStatus.DEPOSIT_PENDING)
+        self.assertEqual(order.contact_address.country_code, "CN")
+
+        duplicate_checkout = self.confirm_checkout(client, order)
+        self.assertEqual(duplicate_checkout.status_code, 200)
+        self.assertFalse(duplicate_checkout.json()["changed"])
+        self.assertEqual(OrderContactAddress.objects.filter(order=order).count(), 1)
 
         self.assertEqual(
             client.post(payment_url, {"payment_type": "deposit", "amount": "0.01"}, format="json").status_code,
@@ -242,6 +305,39 @@ class OrderWorkflowTests(TransactionTestCase):
             [item["id"] for item in outsider.get("/api/v1/me/orders").json()["results"]],
         )
 
+    def test_other_customer_cannot_submit_checkout_or_view_address(self):
+        order = self.proposed_order(self.profile_a, "CHECKOUT-PRIVATE")
+        owner = APIClient()
+        owner.force_login(self.customer_a)
+        owner.post(f"/api/v1/me/orders/{order.pk}/quote-decision", {"decision": "accepted"}, format="json")
+        outsider = APIClient()
+        outsider.force_login(self.customer_b)
+
+        response = self.confirm_checkout(outsider, order)
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(OrderContactAddress.objects.filter(order=order).exists())
+        self.assertNotIn(
+            str(order.pk),
+            [item["id"] for item in outsider.get("/api/v1/me/orders").json()["results"]],
+        )
+
+    def test_checkout_requires_authentication(self):
+        order = self.proposed_order(self.profile_a, "CHECKOUT-LOGIN-REQUIRED")
+        response = self.confirm_checkout(APIClient(), order)
+        self.assertIn(response.status_code, (401, 403))
+        self.assertFalse(OrderContactAddress.objects.filter(order=order).exists())
+
+    def test_checkout_rejects_amount_tampering_and_invalid_address(self):
+        order = self.proposed_order(self.profile_a, "CHECKOUT-VALIDATION")
+        client = APIClient()
+        client.force_login(self.customer_a)
+        client.post(f"/api/v1/me/orders/{order.pk}/quote-decision", {"decision": "accepted"}, format="json")
+        tampered = {**self.checkout_payload, "agreed_amount": "0.01"}
+        self.assertEqual(self.confirm_checkout(client, order, tampered).status_code, 400)
+        invalid_country = {**self.checkout_payload, "country_code": "China"}
+        self.assertEqual(self.confirm_checkout(client, order, invalid_country).status_code, 400)
+        self.assertFalse(OrderContactAddress.objects.filter(order=order).exists())
+
     def test_expired_quote_cannot_be_accepted(self):
         order = self.proposed_order(self.profile_a, "QUOTE-EXPIRED")
         order.quote_valid_until = timezone.now() - timedelta(minutes=1)
@@ -307,6 +403,7 @@ class OrderWorkflowTests(TransactionTestCase):
         self.assertEqual(accepted.status_code, 200)
         self.assertEqual(accepted.json()["order"]["currency"], "USD")
         self.assertNotIn("mock_pay_final", accepted.json()["order"]["available_actions"])
+        self.assertEqual(self.confirm_checkout(client, order).status_code, 200)
         payment = client.post(
             f"/api/v1/me/orders/{order.pk}/mock-payment",
             {"payment_type": "final"},
@@ -453,6 +550,7 @@ class OrderWorkflowTests(TransactionTestCase):
         self.assertIn("agreed_amount", order_admin.get_readonly_fields(request, order))
         self.assertIn("deposit_amount", order_admin.get_readonly_fields(request, order))
         self.assertIn("final_amount", order_admin.get_readonly_fields(request, order))
+        self.assertIn(OrderContactAddressInline, order_admin.inlines)
 
     def test_published_progress_gets_timestamp_before_constraint_validation(self):
         order = self.proposed_order(self.profile_a, "QUOTE-PROGRESS")

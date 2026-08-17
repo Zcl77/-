@@ -37,6 +37,9 @@ describe('internationalization foundation', () => {
     expect(translate('en', '我的项目')).toBe('My Projects');
     expect(translate('en', '定金待支付')).toBe('Deposit pending');
     expect(translate('zh-CN', '定金待支付')).toBe('定金待支付');
+    expect(translate('en', '确认订单与收货信息')).toBe('Confirm order and shipping details');
+    expect(translate('en', '最终应付总额')).toBe('Final amount due');
+    expect(translate('en', '国家或地区代码')).toBe('Country or region code');
   });
 
   it('falls back to the source string when a translation is missing', () => {

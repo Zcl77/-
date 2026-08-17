@@ -5,7 +5,14 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from .models import ClientProject, Order, PaymentRecord, ProductionStage, ProjectMembership
+from .models import (
+    ClientProject,
+    Order,
+    OrderContactAddress,
+    PaymentRecord,
+    ProductionStage,
+    ProjectMembership,
+)
 
 
 DEFAULT_STAGE_NAMES = (
@@ -107,25 +114,21 @@ def decide_quote(*, order_id, customer_user, decision):
         Order.ConfirmationStatus.CONFIRMED if accepted else Order.ConfirmationStatus.CANCELLED
     )
     if accepted:
-        order.deposit_status = (
-            Order.PaymentRecordStatus.PENDING if order.deposit_amount > 0 else Order.PaymentRecordStatus.WAIVED
-        )
-        order.final_payment_status = (
-            Order.PaymentRecordStatus.PENDING if order.final_amount > 0 else Order.PaymentRecordStatus.WAIVED
-        )
-        if order.deposit_amount > 0:
-            order.payment_status = Order.PaymentStatus.DEPOSIT_PENDING
-        elif order.final_amount > 0:
-            order.payment_status = Order.PaymentStatus.FINAL_PENDING
-        else:
-            order.payment_status = Order.PaymentStatus.PAID
+        order.checkout_status = Order.CheckoutStatus.PENDING
+        order.checkout_confirmed_at = None
+        order.deposit_status = Order.PaymentRecordStatus.NOT_RECORDED
+        order.final_payment_status = Order.PaymentRecordStatus.NOT_RECORDED
+        order.payment_status = Order.PaymentStatus.UNPAID
     else:
+        order.checkout_status = Order.CheckoutStatus.NOT_STARTED
         order.payment_status = Order.PaymentStatus.CANCELLED
     order.save(
         update_fields=[
             "quote_decision",
             "quote_decision_at",
             "confirmation_status",
+            "checkout_status",
+            "checkout_confirmed_at",
             "deposit_amount",
             "final_amount",
             "deposit_status",
@@ -159,6 +162,68 @@ def decide_quote(*, order_id, customer_user, decision):
 
 
 @transaction.atomic
+def confirm_checkout(*, order_id, customer_user, address_data):
+    order = (
+        Order.objects.select_for_update()
+        .select_related("customer__user")
+        .get(pk=order_id, customer__user=customer_user)
+    )
+    if (
+        order.confirmation_status != Order.ConfirmationStatus.CONFIRMED
+        or order.quote_decision != Order.QuoteDecision.ACCEPTED
+    ):
+        raise ValidationError("只有已接受报价的订单可以确认结账。", code="checkout_not_available")
+    if order.checkout_status == Order.CheckoutStatus.CONFIRMED:
+        return order, False
+    if order.checkout_status != Order.CheckoutStatus.PENDING:
+        raise ValidationError("订单当前不处于待确认结账状态。", code="invalid_checkout_state")
+
+    order._prepare_amounts()
+    if (
+        order.agreed_amount is None
+        or order.agreed_amount <= 0
+        or order.calculated_total != order.agreed_amount
+        or order.deposit_amount < 0
+        or order.final_amount < 0
+        or order.deposit_amount + order.final_amount != order.agreed_amount
+    ):
+        raise ValidationError("订单金额构成不合法，无法确认结账。", code="invalid_amounts")
+
+    address = OrderContactAddress(order=order, **address_data)
+    address.full_clean()
+    address.save()
+    order.checkout_status = Order.CheckoutStatus.CONFIRMED
+    order.checkout_confirmed_at = timezone.now()
+    order.deposit_status = (
+        Order.PaymentRecordStatus.PENDING if order.deposit_amount > 0 else Order.PaymentRecordStatus.WAIVED
+    )
+    order.final_payment_status = (
+        Order.PaymentRecordStatus.PENDING if order.final_amount > 0 else Order.PaymentRecordStatus.WAIVED
+    )
+    if order.deposit_amount > 0:
+        order.payment_status = Order.PaymentStatus.DEPOSIT_PENDING
+    elif order.final_amount > 0:
+        order.payment_status = Order.PaymentStatus.FINAL_PENDING
+    else:
+        order.payment_status = Order.PaymentStatus.PAID
+    order.save(
+        update_fields=[
+            "agreed_amount",
+            "service_subtotal",
+            "deposit_amount",
+            "final_amount",
+            "checkout_status",
+            "checkout_confirmed_at",
+            "deposit_status",
+            "final_payment_status",
+            "payment_status",
+            "updated_at",
+        ]
+    )
+    return order, True
+
+
+@transaction.atomic
 def record_mock_payment(*, order_id, customer_user, payment_type):
     if not settings.MOCK_PAYMENTS_ENABLED:
         raise ValidationError("模拟付款仅在显式启用的本地开发环境开放。", code="mock_payment_disabled")
@@ -174,6 +239,7 @@ def record_mock_payment(*, order_id, customer_user, payment_type):
     if (
         order.confirmation_status != Order.ConfirmationStatus.CONFIRMED
         or order.quote_decision != Order.QuoteDecision.ACCEPTED
+        or order.checkout_status != Order.CheckoutStatus.CONFIRMED
     ):
         raise ValidationError("只有已接受报价的订单可以进行本地模拟付款。", code="invalid_payment_state")
     if order.currency != Order.Currency.CNY:
