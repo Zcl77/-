@@ -52,7 +52,7 @@ class SiteView(APIView):
                     "is_dev_data": False,
                 }
             )
-        return Response(StudioSettingSerializer(setting).data)
+        return Response(StudioSettingSerializer(setting, context={"request": request}).data)
 
 
 class CategoryListView(ListAPIView):

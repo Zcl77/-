@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  filterProjectsByCategory,
   listProjectMedia,
   resolveGalleryMedia,
   resolveSelectedProject,
@@ -12,6 +13,7 @@ function createProject(id: string, overrides: Partial<Project> = {}): Project {
     title: `作品 ${id}`,
     scale: '1:64',
     category: '建筑微缩',
+    categorySlug: 'architecture',
     status: 'WIP',
     visibility: 'public',
     description: '原始说明',
@@ -79,5 +81,11 @@ describe('gallery selection reconciliation', () => {
     listProjectMedia(projects[1]);
 
     expect(projects).toEqual(snapshot);
+  });
+
+  it('preserves a category selection when its localized display name changes', () => {
+    const project = createProject('selected', { category: 'Architecture' });
+
+    expect(filterProjectsByCategory([project], 'architecture')).toEqual([project]);
   });
 });

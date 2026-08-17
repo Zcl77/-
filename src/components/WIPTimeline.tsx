@@ -5,20 +5,19 @@ import { PublicProcessPost } from '../types';
 import MediaLightbox from './ui/MediaLightbox';
 import SmartImage from './ui/SmartImage';
 import StatusNotice from './ui/StatusNotice';
+import { useI18n } from '../i18n';
 
 interface WIPTimelineProps {
   posts: PublicProcessPost[];
   onOpenWork: (slug: string) => void;
 }
 
-function formatDate(value: string | null) {
-  if (!value) return '日期待补充';
-  return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(
-    new Date(value),
-  );
-}
-
 export default function WIPTimeline({ posts, onOpenWork }: WIPTimelineProps) {
+  const { t, formatDate: formatLocalizedDate } = useI18n();
+  const formatDate = (value: string | null) =>
+    value
+      ? formatLocalizedDate(value, { year: 'numeric', month: '2-digit', day: '2-digit' })
+      : t('日期待补充');
   const sortedPosts = useMemo(
     () =>
       [...posts].sort(
@@ -43,27 +42,29 @@ export default function WIPTimeline({ posts, onOpenWork }: WIPTimelineProps) {
     <div className="page-shell">
       <div className="page-inner">
         <header className="border-b border-studio-line pb-6 md:pb-8">
-          <span className="page-kicker">Public making journal</span>
-          <h1 className="page-title mt-2">公开制作日志</h1>
+          <span className="page-kicker">{t('公开制作日志')}</span>
+          <h1 className="page-title mt-2">{t('公开制作日志')}</h1>
           <p className="page-description mt-3">
-            记录可以公开分享的工艺、材料与制作过程。客户订单的私人进度只在登录后的“我的项目”中显示。
+            {t('记录可以公开分享的工艺、材料与制作过程。客户订单的私人进度只在登录后的“我的项目”中显示。')}
           </p>
         </header>
 
         {!selected ? (
           <StatusNotice
             tone="empty"
-            title="尚无公开制作日志"
-            description="工作室发布真实过程记录后会显示在这里；不会用虚构进度填充页面。"
+            title={t('尚无公开制作日志')}
+            description={t('工作室发布真实过程记录后会显示在这里；不会用虚构进度填充页面。')}
             className="mt-7"
           />
         ) : (
           <div className="mt-7 grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-10 xl:gap-14">
-            <aside className="order-2 lg:order-1 lg:col-span-4" aria-label="制作日志索引">
+            <aside className="order-2 lg:order-1 lg:col-span-4" aria-label={t('制作日志索引')}>
               <div className="lg:sticky lg:top-8">
                 <div className="flex items-center justify-between border-b border-studio-line pb-3">
-                  <h2 className="section-title">日志索引</h2>
-                  <span className="text-[10px] text-studio-faint">{sortedPosts.length} 篇</span>
+                  <h2 className="section-title">{t('日志索引')}</h2>
+                  <span className="text-[10px] text-studio-faint">
+                    {sortedPosts.length} {t('篇')}
+                  </span>
                 </div>
                 <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
                   {sortedPosts.map((post) => {
@@ -108,7 +109,7 @@ export default function WIPTimeline({ posts, onOpenWork }: WIPTimelineProps) {
                       type="button"
                       onClick={() => setLightboxIndex(0)}
                       className="group flex aspect-[16/10] w-full items-center justify-center overflow-hidden rounded-[6px] border border-studio-line bg-black"
-                      aria-label={`放大查看 ${selected.title} 图片`}
+                      aria-label={t('放大查看 {name}', { name: `${selected.title} ${t('图片')}` })}
                     >
                       <SmartImage
                         src={images[0]}
@@ -122,7 +123,7 @@ export default function WIPTimeline({ posts, onOpenWork }: WIPTimelineProps) {
                   ) : (
                     <div className="flex min-h-48 items-center justify-center rounded-[6px] border border-studio-line bg-studio-surface text-xs text-studio-muted">
                       <Images className="mr-2 h-4 w-4" />
-                      本篇日志未附过程图片
+                      {t('本篇日志未附过程图片')}
                     </div>
                   )}
 
@@ -130,7 +131,9 @@ export default function WIPTimeline({ posts, onOpenWork }: WIPTimelineProps) {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="tag">{formatDate(selected.publishedAt)}</span>
                       {selected.isDevData && (
-                        <span className="tag border-studio-warning/40 text-studio-warning">本地开发数据</span>
+                        <span className="tag border-studio-warning/40 text-studio-warning">
+                          {t('本地开发数据')}
+                        </span>
                       )}
                     </div>
                     <h2 className="mt-3 font-serif text-2xl font-semibold leading-snug text-studio-ink md:text-3xl">
@@ -146,7 +149,8 @@ export default function WIPTimeline({ posts, onOpenWork }: WIPTimelineProps) {
                         className="button-quiet mt-4"
                       >
                         <Link2 className="h-4 w-4" />
-                        查看关联作品：{selected.work.title}
+                        {t('查看关联作品：')}
+                        {selected.work.title}
                       </button>
                     )}
                   </div>
@@ -156,7 +160,7 @@ export default function WIPTimeline({ posts, onOpenWork }: WIPTimelineProps) {
                   </div>
 
                   {selected.images.length > 1 && (
-                    <section className="mt-10 border-t border-studio-line pt-7" aria-label="过程图片">
+                    <section className="mt-10 border-t border-studio-line pt-7" aria-label={t('过程图片')}>
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                         {selected.images.map((image, index) => (
                           <button
@@ -164,7 +168,7 @@ export default function WIPTimeline({ posts, onOpenWork }: WIPTimelineProps) {
                             type="button"
                             onClick={() => setLightboxIndex(index)}
                             className="group aspect-[4/3] overflow-hidden rounded-[4px] border border-studio-line bg-black"
-                            aria-label={`放大查看 ${image.altText}`}
+                            aria-label={t('放大查看 {name}', { name: image.altText })}
                           >
                             <SmartImage
                               src={image.media.thumbnailUrl}

@@ -1,5 +1,10 @@
 export type ProjectCategory = string;
 
+export interface PublicCategory {
+  slug: string;
+  name: string;
+}
+
 export type ProjectVisibility = 'public' | 'hidden';
 export type ReviewStatus = 'pending' | 'approved' | 'rejected';
 
@@ -27,6 +32,7 @@ export interface Project {
   title: string;
   scale: string;
   category: ProjectCategory;
+  categorySlug: string;
   status: 'WIP' | 'Completed' | 'Sold';
   visibility: ProjectVisibility;
   description: string;
@@ -128,7 +134,7 @@ export interface CustomerPaymentRecord {
   paymentType: 'deposit' | 'final' | 'refund';
   channel: 'mock';
   amount: string;
-  currency: 'CNY';
+  currency: 'CNY' | 'USD';
   status: 'pending' | 'succeeded' | 'failed' | 'refunded';
   mockTransactionId: string | null;
   paidAt: string | null;
@@ -141,7 +147,7 @@ export interface CustomerOrder {
   orderType: string;
   confirmationStatus: 'inquiry' | 'proposed' | 'confirmed' | 'cancelled';
   agreedAmount: string | null;
-  currency: 'CNY';
+  currency: 'CNY' | 'USD';
   depositAmount: string;
   finalAmount: string;
   quotedAt: string | null;

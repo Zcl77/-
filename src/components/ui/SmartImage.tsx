@@ -1,5 +1,6 @@
 import { ImgHTMLAttributes, useEffect, useState } from 'react';
 import { ImageOff } from 'lucide-react';
+import { useI18n } from '../../i18n';
 
 interface SmartImageProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> {
   src?: string;
@@ -15,6 +16,7 @@ export default function SmartImage({
   onError,
   ...props
 }: SmartImageProps) {
+  const { t } = useI18n();
   const [failed, setFailed] = useState(false);
 
   useEffect(() => setFailed(false), [src]);
@@ -24,10 +26,10 @@ export default function SmartImage({
       <span
         className={`flex items-center justify-center gap-2 bg-studio-surface text-studio-faint ${className}`}
         role="img"
-        aria-label={`${alt || '图片'}暂不可用`}
+        aria-label={`${alt || t('图片')} ${t('图片暂不可用')}`}
       >
         <ImageOff className="h-4 w-4 shrink-0" aria-hidden="true" />
-        {showFallbackText && <span className="text-[10px]">图片暂不可用</span>}
+        {showFallbackText && <span className="text-[10px]">{t('图片暂不可用')}</span>}
       </span>
     );
   }

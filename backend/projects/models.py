@@ -16,6 +16,7 @@ from media_library.models import MediaAsset
 class Order(UUIDTimeStampedModel):
     class Currency(models.TextChoices):
         CNY = "CNY", "人民币"
+        USD = "USD", "美元"
 
     class ConfirmationStatus(models.TextChoices):
         INQUIRY = "inquiry", "询价中"
@@ -109,7 +110,10 @@ class Order(UUIDTimeStampedModel):
             ),
             models.CheckConstraint(condition=Q(deposit_amount__gte=0), name="projects_order_deposit_nonnegative"),
             models.CheckConstraint(condition=Q(final_amount__gte=0), name="projects_order_final_nonnegative"),
-            models.CheckConstraint(condition=Q(currency="CNY"), name="projects_order_currency_supported"),
+            models.CheckConstraint(
+                condition=Q(currency__in=("CNY", "USD")),
+                name="projects_order_currency_iso_supported",
+            ),
             models.CheckConstraint(
                 condition=(
                     Q(agreed_amount__isnull=True, deposit_amount=0, final_amount=0)
@@ -229,7 +233,10 @@ class PaymentRecord(UUIDTimeStampedModel):
         verbose_name_plural = "付款记录"
         constraints = [
             models.CheckConstraint(condition=Q(amount__gt=0), name="projects_payment_amount_positive"),
-            models.CheckConstraint(condition=Q(currency=Order.Currency.CNY), name="projects_payment_currency_supported"),
+            models.CheckConstraint(
+                condition=Q(currency__in=("CNY", "USD")),
+                name="projects_payment_currency_iso_supported",
+            ),
         ]
 
     def clean(self):

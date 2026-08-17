@@ -13,23 +13,25 @@ import { usePublicSiteData } from './hooks/usePublicSiteData';
 import { useRoute } from './hooks/useRoute';
 import { useSessionAuth } from './hooks/useSessionAuth';
 import { submitInquiry, submitReview } from './services/api/repositories';
+import { useI18n } from './i18n';
 
 export default function App() {
   const { path, navigate } = useRoute();
   const route = useMemo(() => parseRoute(path), [path]);
   const publicData = usePublicSiteData();
   const auth = useSessionAuth();
-  const accountLabel = auth.user.authenticated ? '我的项目' : '客户登录';
+  const { locale, localeTransitionPhase, t } = useI18n();
+  const accountLabel = auth.user.authenticated ? t('我的项目') : t('客户登录');
 
   useEffect(() => {
     const titles: Record<AppTab, string> = {
-      gallery: '作品展厅',
-      process: '公开制作日志',
-      contact: '询价与评价',
+      gallery: t('作品展厅'),
+      process: t('公开制作日志'),
+      contact: t('询价与评价'),
       account: accountLabel,
     };
-    document.title = `${titles[route.tab]} | 知行造境`;
-  }, [accountLabel, route.tab]);
+    document.title = `${titles[route.tab]} | ${t('知行造境')}`;
+  }, [accountLabel, locale, route.tab, t]);
 
   const navigateTab = (tab: AppTab) => {
     const routes: Record<AppTab, string> = {
@@ -48,8 +50,8 @@ export default function App() {
         <PageStatus>
           <StatusNotice
             tone="loading"
-            title="正在读取网站内容"
-            description="正在从本地 Django 服务读取公开作品、制作日志与已审核评价。"
+            title={t('正在读取网站内容')}
+            description={t('正在从本地 Django 服务读取公开作品、制作日志与已审核评价。')}
           />
         </PageStatus>
       );
@@ -59,12 +61,12 @@ export default function App() {
         <PageStatus>
           <StatusNotice
             tone="error"
-            title="网站内容加载失败"
+            title={t('网站内容加载失败')}
             description={publicData.error || undefined}
             action={
               <button type="button" onClick={() => void publicData.reload()} className="button-secondary">
                 <RefreshCw className="h-4 w-4" />
-                重新加载
+                {t('重新加载')}
               </button>
             }
           />
@@ -73,7 +75,7 @@ export default function App() {
     }
     if (route.tab === 'gallery') {
       if (route.workSlug && !publicData.projects.some((project) => project.slug === route.workSlug)) {
-        return <NotFound title="作品不存在或尚未公开" onHome={() => navigate('/')} />;
+        return <NotFound title={t('作品不存在或尚未公开')} onHome={() => navigate('/')} />;
       }
       return (
         <GalleryView
@@ -104,7 +106,7 @@ export default function App() {
     if (auth.status === 'loading')
       return (
         <PageStatus>
-          <StatusNotice tone="loading" title="正在检查登录状态" description="正在恢复安全会话。" />
+          <StatusNotice tone="loading" title={t('正在检查登录状态')} description={t('正在恢复安全会话。')} />
         </PageStatus>
       );
     if (auth.status === 'error' && !auth.user.authenticated)
@@ -112,12 +114,12 @@ export default function App() {
         <PageStatus>
           <StatusNotice
             tone="error"
-            title="登录服务暂时不可用"
+            title={t('登录服务暂时不可用')}
             description={auth.error || undefined}
             action={
               <button type="button" onClick={() => void auth.refresh()} className="button-secondary">
                 <RefreshCw className="h-4 w-4" />
-                重试
+                {t('重试')}
               </button>
             }
           />
@@ -150,18 +152,21 @@ export default function App() {
     <MotionConfig reducedMotion="user" transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
       <div className="min-h-dvh bg-studio-canvas font-sans text-studio-ink">
         <Sidebar activeTab={route.tab} onNavigate={navigateTab} accountLabel={accountLabel} />
-        <div className="min-h-dvh pb-[4.5rem] pt-14 lg:pb-0 lg:pl-28 lg:pt-0">
+        <div
+          className="locale-transition-content min-h-dvh pb-[4.5rem] pt-14 lg:pb-0 lg:pl-28 lg:pt-0"
+          data-locale-phase={localeTransitionPhase}
+        >
           {route.tab !== 'account' && publicData.refreshError && (
             <div className="mx-auto max-w-7xl px-5 pt-4 md:px-8">
               <StatusNotice
                 tone="error"
                 compact
-                title="自动同步暂时中断"
-                description={`${publicData.refreshError} 页面会自动退避重试。`}
+                title={t('自动同步暂时中断')}
+                description={`${publicData.refreshError} ${t('页面会自动退避重试。')}`}
                 action={
                   <button type="button" onClick={() => void publicData.reload()} className="button-secondary">
                     <RefreshCw className="h-4 w-4" />
-                    立即重试
+                    {t('立即重试')}
                   </button>
                 }
               />
@@ -191,17 +196,18 @@ function PageStatus({ children }: { children: React.ReactNode }) {
   );
 }
 
-function NotFound({ title = '页面不存在', onHome }: { title?: string; onHome: () => void }) {
+function NotFound({ title, onHome }: { title?: string; onHome: () => void }) {
+  const { t } = useI18n();
   return (
     <PageStatus>
       <StatusNotice
         tone="empty"
-        title={title}
-        description="链接可能已经变更，或内容当前不可公开访问。"
+        title={title ? t(title) : t('页面不存在')}
+        description={t('链接可能已经变更，或内容当前不可公开访问。')}
         action={
           <button type="button" onClick={onHome} className="button-secondary">
             <ArrowLeft className="h-4 w-4" />
-            返回作品展厅
+            {t('返回作品展厅')}
           </button>
         }
       />

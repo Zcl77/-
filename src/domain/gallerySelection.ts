@@ -1,4 +1,5 @@
 import { Project } from '../types';
+import type { Locale } from '../i18n';
 
 export type GalleryMediaType = 'project-cover' | 'project-image' | 'room-image';
 
@@ -21,20 +22,27 @@ export function resolveSelectedProject(
   return projects.find((project) => project.id === selectedProjectId) ?? projects[0] ?? null;
 }
 
-export function listProjectMedia(project: Project | null): GalleryMedia[] {
+export function filterProjectsByCategory(projects: Project[], categorySlug: string | null) {
+  return categorySlug ? projects.filter((project) => project.categorySlug === categorySlug) : projects;
+}
+
+export function listProjectMedia(project: Project | null, locale: Locale = 'zh-CN'): GalleryMedia[] {
   if (!project) return [];
 
   return [
     {
       key: 'cover',
       url: project.coverUrl,
-      alt: `${project.title} 封面`,
+      alt: locale === 'en' ? `${project.title} cover` : `${project.title} 封面`,
       type: 'project-cover' as const,
     },
     ...project.images.map((url, imageIndex) => ({
       key: `project-${imageIndex}`,
       url,
-      alt: `${project.title} 作品视角 ${imageIndex + 1}`,
+      alt:
+        locale === 'en'
+          ? `${project.title} view ${imageIndex + 1}`
+          : `${project.title} 作品视角 ${imageIndex + 1}`,
       type: 'project-image' as const,
       imageIndex,
     })),
@@ -52,8 +60,9 @@ export function mediaSelection(media: GalleryMedia): GalleryMediaSelection {
 export function resolveGalleryMedia(
   project: Project | null,
   selection: GalleryMediaSelection | null,
+  locale: Locale = 'zh-CN',
 ): GalleryMedia | null {
-  const projectMedia = listProjectMedia(project);
+  const projectMedia = listProjectMedia(project, locale);
   if (!project || !selection) return projectMedia[0] ?? null;
 
   if (selection.type === 'project-cover') {
@@ -77,7 +86,10 @@ export function resolveGalleryMedia(
   return {
     key: `room-${room.id}-${selection.imageIndex}`,
     url,
-    alt: `${room.name} 细节 ${(selection.imageIndex ?? 0) + 1}`,
+    alt:
+      locale === 'en'
+        ? `${room.name} detail ${(selection.imageIndex ?? 0) + 1}`
+        : `${room.name} 细节 ${(selection.imageIndex ?? 0) + 1}`,
     type: 'room-image',
     roomId: room.id,
     imageIndex: selection.imageIndex,

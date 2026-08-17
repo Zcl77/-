@@ -40,6 +40,19 @@ function endpointUrl(path: string): string {
   return `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
+function requestLocale(): string {
+  if (typeof window === 'undefined') return 'zh-CN';
+  let storedLocale: string | null = null;
+  try {
+    storedLocale = window.localStorage?.getItem('zhixing.locale') ?? null;
+  } catch {
+    // Storage can be unavailable in privacy-restricted browsers; language detection remains safe.
+  }
+  const browserLanguage = window.navigator?.language || 'zh-CN';
+  const locale = storedLocale === 'en' || storedLocale === 'zh-CN' ? storedLocale : browserLanguage;
+  return locale.toLowerCase().startsWith('en') ? 'en' : 'zh-CN';
+}
+
 function fallbackErrorMessage(status: number): string {
   if (status === 401) return '登录状态已过期，请重新登录。';
   if (status === 403) return '当前账号没有执行此操作的权限，或安全校验已过期。';
@@ -71,6 +84,9 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   const method = (init.method || 'GET').toUpperCase();
   const headers = new Headers(init.headers);
   headers.set('Accept', 'application/json');
+  if (!headers.has('Accept-Language')) {
+    headers.set('Accept-Language', requestLocale());
+  }
   if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }

@@ -6,15 +6,33 @@ from media_library.serializers import serialize_media
 from .models import Category, PublicProcessPost, StudioSetting, Work, WorkImage
 
 
-class CategorySerializer(StrictModelSerializer):
+class LocalizedRepresentationMixin:
+    localized_fields = ()
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        request = self.context.get("request")
+        language = request.headers.get("Accept-Language", "") if request else ""
+        if language.lower().startswith("en"):
+            for field in self.localized_fields:
+                english_value = getattr(instance, f"{field}_en", "")
+                if english_value:
+                    representation[field] = english_value
+        return representation
+
+
+class CategorySerializer(LocalizedRepresentationMixin, StrictModelSerializer):
+    localized_fields = ("name", "description")
+
     class Meta:
         model = Category
         fields = ("id", "name", "slug", "description")
         read_only_fields = fields
 
 
-class WorkImageSerializer(StrictModelSerializer):
+class WorkImageSerializer(LocalizedRepresentationMixin, StrictModelSerializer):
     media = serializers.SerializerMethodField()
+    localized_fields = ("alt_text", "caption", "room_name")
 
     class Meta:
         model = WorkImage
@@ -25,10 +43,20 @@ class WorkImageSerializer(StrictModelSerializer):
         return serialize_media(obj.media, self.context["request"])
 
 
-class WorkListSerializer(StrictModelSerializer):
+class WorkListSerializer(LocalizedRepresentationMixin, StrictModelSerializer):
     category = CategorySerializer(read_only=True)
     cover = serializers.SerializerMethodField()
     images = serializers.SerializerMethodField()
+    localized_fields = (
+        "title",
+        "summary",
+        "description",
+        "scale",
+        "dimensions",
+        "materials",
+        "period",
+        "authors",
+    )
 
     class Meta:
         model = Work
@@ -67,9 +95,10 @@ class WorkDetailSerializer(WorkListSerializer):
     pass
 
 
-class PublicProcessPostSerializer(StrictModelSerializer):
+class PublicProcessPostSerializer(LocalizedRepresentationMixin, StrictModelSerializer):
     work = serializers.SerializerMethodField()
     images = serializers.SerializerMethodField()
+    localized_fields = ("title", "summary", "body")
 
     class Meta:
         model = PublicProcessPost
@@ -79,15 +108,19 @@ class PublicProcessPostSerializer(StrictModelSerializer):
     def get_work(self, obj):
         if not obj.work_id:
             return None
-        return {"title": obj.work.title, "slug": obj.work.slug}
+        request = self.context.get("request")
+        use_english = request and request.headers.get("Accept-Language", "").lower().startswith("en")
+        return {"title": obj.work.title_en or obj.work.title if use_english else obj.work.title, "slug": obj.work.slug}
 
     def get_images(self, obj):
         images = getattr(obj, "public_images", [])
+        request = self.context.get("request")
+        use_english = request and request.headers.get("Accept-Language", "").lower().startswith("en")
         return [
             {
                 "id": str(image.pk),
-                "altText": image.alt_text,
-                "caption": image.caption,
+                "altText": image.alt_text_en or image.alt_text if use_english else image.alt_text,
+                "caption": image.caption_en or image.caption if use_english else image.caption,
                 "sortOrder": image.sort_order,
                 "media": serialize_media(image.media, self.context["request"]),
             }
@@ -95,7 +128,9 @@ class PublicProcessPostSerializer(StrictModelSerializer):
         ]
 
 
-class StudioSettingSerializer(StrictModelSerializer):
+class StudioSettingSerializer(LocalizedRepresentationMixin, StrictModelSerializer):
+    localized_fields = ("tagline", "description", "privacy_notice")
+
     class Meta:
         model = StudioSetting
         fields = (

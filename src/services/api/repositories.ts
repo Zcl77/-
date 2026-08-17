@@ -125,7 +125,7 @@ interface RawPaymentRecord {
   payment_type: CustomerOrder['paymentRecords'][number]['paymentType'];
   channel: 'mock';
   amount: string;
-  currency: 'CNY';
+  currency: 'CNY' | 'USD';
   status: CustomerOrder['paymentRecords'][number]['status'];
   mock_transaction_id: string | null;
   paid_at: string | null;
@@ -194,12 +194,12 @@ function workRooms(images: RawWorkImage[]): RoomDetail[] {
   images
     .filter((image) => image.kind === 'room')
     .forEach((image) => {
-      const name = image.room_name || '空间细节';
-      grouped.set(name, [...(grouped.get(name) || []), image]);
+      const groupKey = image.room_name || '__unnamed-room__';
+      grouped.set(groupKey, [...(grouped.get(groupKey) || []), image]);
     });
-  return Array.from(grouped.entries()).map(([name, roomImages]) => ({
-    id: `${name}-${roomImages[0].id}`,
-    name,
+  return Array.from(grouped.entries()).map(([, roomImages]) => ({
+    id: `room-${roomImages[0].id}`,
+    name: roomImages[0].room_name,
     coverUrl: roomImages[0].media.displayUrl,
     images: roomImages.map((image) => image.media.displayUrl),
     description: roomImages
@@ -220,6 +220,7 @@ function mapWork(work: RawWork): Project {
     title: work.title,
     scale: work.scale,
     category: work.category.name,
+    categorySlug: work.category.slug,
     status: work.completion_percent < 100 ? 'WIP' : 'Completed',
     visibility: 'public',
     description: work.description || work.summary,
@@ -328,7 +329,7 @@ export async function getPublicSiteData() {
       privacyNotice: site.privacy_notice,
       isDevData: site.is_dev_data,
     } satisfies SiteInfo,
-    categories: categories.map((category) => category.name),
+    categories: categories.map(({ slug, name }) => ({ slug, name })),
     projects: works.map(mapWork),
     processPosts: processPosts.map(
       (post) =>

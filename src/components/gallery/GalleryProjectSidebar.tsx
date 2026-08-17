@@ -1,11 +1,12 @@
 import { Clock3, Gauge, ListTree } from 'lucide-react';
 import { Project } from '../../types';
 import SmartImage from '../ui/SmartImage';
+import { useI18n } from '../../i18n';
 
 interface GalleryProjectSidebarProps {
   selectedProject: Project;
   projects: Project[];
-  selectedCategory: string;
+  selectedCategory: string | null;
   onSelectProject: (project: Project) => void;
 }
 
@@ -27,6 +28,7 @@ export default function GalleryProjectSidebar({
   selectedCategory,
   onSelectProject,
 }: GalleryProjectSidebarProps) {
+  const { t } = useI18n();
   return (
     <aside className="min-w-0 lg:col-span-4">
       <div className="lg:sticky lg:top-8">
@@ -36,7 +38,7 @@ export default function GalleryProjectSidebar({
         >
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <span className="page-kicker">Selected work</span>
+              <span className="page-kicker">{t('当前作品')}</span>
               <h2
                 id="selected-project-title"
                 className="mt-2 text-balance font-serif text-xl font-semibold leading-snug text-studio-ink xl:text-2xl"
@@ -47,7 +49,7 @@ export default function GalleryProjectSidebar({
             <span
               className={`tag shrink-0 ${selectedProject.status === 'WIP' ? 'border-studio-warning/50 text-studio-warning' : 'border-studio-success/50 text-studio-success'}`}
             >
-              {STATUS_LABELS[selectedProject.status]}
+              {t(STATUS_LABELS[selectedProject.status])}
             </span>
           </div>
 
@@ -56,7 +58,7 @@ export default function GalleryProjectSidebar({
             <span aria-hidden="true">/</span>
             <span>{selectedProject.scale}</span>
             {selectedProject.isDemo && (
-              <span className="tag border-studio-warning/40 text-studio-warning">演示内容</span>
+              <span className="tag border-studio-warning/40 text-studio-warning">{t('演示内容')}</span>
             )}
           </div>
 
@@ -67,18 +69,18 @@ export default function GalleryProjectSidebar({
               <div className="border-r border-studio-line py-4 pr-4">
                 <dt className="flex items-center gap-2 text-[10px] uppercase text-studio-faint">
                   <Clock3 className="h-3.5 w-3.5" />
-                  制作耗时
+                  {t('制作耗时')}
                 </dt>
                 <dd className="mt-2 font-serif text-xl text-studio-ink">
                   {selectedProject.timeSpent}
-                  <span className="ml-1 text-xs text-studio-muted">小时</span>
+                  <span className="ml-1 text-xs text-studio-muted">{t('小时')}</span>
                 </dd>
               </div>
             )}
             <div className={`py-4 ${selectedProject.timeSpent === undefined ? '' : 'pl-4'}`}>
               <dt className="flex items-center gap-2 text-[10px] uppercase text-studio-faint">
                 <Gauge className="h-3.5 w-3.5" />
-                完成比例
+                {t('完成比例')}
               </dt>
               <dd className="mt-2 font-serif text-xl text-studio-ink">
                 {selectedProject.completionPercent}
@@ -91,7 +93,7 @@ export default function GalleryProjectSidebar({
             <div className="mt-6">
               <h3 className="flex items-center gap-2 text-xs font-semibold text-studio-ink">
                 <ListTree className="h-4 w-4 text-studio-oxide" />
-                关键制作节点
+                {t('关键制作节点')}
               </h3>
               <ol className="mt-4 space-y-0 border-l border-studio-line">
                 {selectedProject.worksteps.map((step) => (
@@ -102,7 +104,7 @@ export default function GalleryProjectSidebar({
                     <div className="flex items-start justify-between gap-3">
                       <span className="text-xs leading-5 text-studio-muted">{step.name}</span>
                       <span className="shrink-0 text-[9px] uppercase text-studio-faint">
-                        {STEP_STATUS_LABELS[step.status]}
+                        {t(STEP_STATUS_LABELS[step.status])}
                       </span>
                     </div>
                   </li>
@@ -115,9 +117,11 @@ export default function GalleryProjectSidebar({
         <section className="mt-8" aria-labelledby="project-index">
           <div className="flex items-center justify-between gap-3">
             <h3 id="project-index" className="section-title">
-              {selectedCategory === 'All' ? '作品索引' : `${selectedCategory} / 作品索引`}
+              {selectedCategory ? `${selectedCategory} / ${t('作品索引')}` : t('作品索引')}
             </h3>
-            <span className="text-[10px] text-studio-faint">{projects.length} 件</span>
+            <span className="text-[10px] text-studio-faint">
+              {projects.length} {t('件')}
+            </span>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:max-h-[26rem] lg:grid-cols-1 lg:overflow-y-auto lg:pr-1">
             {projects.map((project, index) => {
@@ -133,7 +137,7 @@ export default function GalleryProjectSidebar({
                   <span className="aspect-[4/3] w-20 shrink-0 overflow-hidden rounded-[2px] bg-black">
                     <SmartImage
                       src={project.coverUrl}
-                      alt={`${project.title} 封面缩略图`}
+                      alt={`${project.title} ${t('封面缩略图')}`}
                       className="media-hover h-full w-full object-cover"
                       referrerPolicy="no-referrer"
                       loading="lazy"
@@ -148,8 +152,8 @@ export default function GalleryProjectSidebar({
                       {project.title}
                     </strong>
                     <span className="mt-1 block text-[10px] text-studio-muted">
-                      {project.scale || '比例待补充'}
-                      {project.timeSpent === undefined ? '' : ` · ${project.timeSpent} 小时`}
+                      {project.scale || t('比例待补充')}
+                      {project.timeSpent === undefined ? '' : ` · ${project.timeSpent} ${t('小时')}`}
                     </span>
                   </span>
                 </button>
