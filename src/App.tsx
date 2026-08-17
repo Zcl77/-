@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'motion/react';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 import CommissionForm from './components/CommissionForm';
@@ -14,6 +14,8 @@ import { useRoute } from './hooks/useRoute';
 import { useSessionAuth } from './hooks/useSessionAuth';
 import { submitInquiry, submitReview } from './services/api/repositories';
 import { useI18n } from './i18n';
+import { useInquiryCart } from './hooks/useInquiryCart';
+import CartPanel from './components/CartPanel';
 
 export default function App() {
   const { path, navigate } = useRoute();
@@ -21,6 +23,8 @@ export default function App() {
   const publicData = usePublicSiteData();
   const auth = useSessionAuth();
   const { locale, localeTransitionPhase, t } = useI18n();
+  const cart = useInquiryCart(publicData.projects);
+  const [cartOpen, setCartOpen] = useState(false);
   const accountLabel = auth.user.authenticated ? t('我的项目') : t('客户登录');
 
   useEffect(() => {
@@ -84,6 +88,7 @@ export default function App() {
           selectedProjectSlug={route.workSlug}
           onProjectChange={(project) => navigate(`/works/${project.slug}`)}
           onCategoryChange={() => navigate('/')}
+          onAddToCart={cart.add}
         />
       );
     }
@@ -98,6 +103,8 @@ export default function App() {
         site={publicData.site}
         onAddReview={submitReview}
         onSubmitInquiry={submitInquiry}
+        selectedProjectNames={cart.items.map((item) => item.title)}
+        onInquirySubmitted={cart.clear}
       />
     );
   };
@@ -153,7 +160,13 @@ export default function App() {
   return (
     <MotionConfig reducedMotion="user" transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
       <div className="min-h-dvh bg-studio-canvas font-sans text-studio-ink">
-        <Sidebar activeTab={route.tab} onNavigate={navigateTab} accountLabel={accountLabel} />
+        <Sidebar
+          activeTab={route.tab}
+          onNavigate={navigateTab}
+          accountLabel={accountLabel}
+          cartCount={cart.count}
+          onOpenCart={() => setCartOpen(true)}
+        />
         <div
           className="locale-transition-content min-h-dvh pb-[4.5rem] pt-14 lg:pb-0 lg:pl-28 lg:pt-0"
           data-locale-phase={localeTransitionPhase}
@@ -186,6 +199,18 @@ export default function App() {
           </AnimatePresence>
         </div>
       </div>
+      {cartOpen && (
+        <CartPanel
+          items={cart.items}
+          onRemove={cart.remove}
+          onClear={cart.clear}
+          onClose={() => setCartOpen(false)}
+          onInquiry={() => {
+            setCartOpen(false);
+            navigate('/contact');
+          }}
+        />
+      )}
     </MotionConfig>
   );
 }

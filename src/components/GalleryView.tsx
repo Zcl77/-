@@ -33,6 +33,7 @@ interface GalleryViewProps {
   selectedProjectSlug?: string | null;
   onProjectChange?: (project: Project) => void;
   onCategoryChange?: () => void;
+  onAddToCart: (project: Project) => void;
 }
 
 interface LightboxState {
@@ -48,6 +49,7 @@ export default function GalleryView({
   selectedProjectSlug = null,
   onProjectChange,
   onCategoryChange,
+  onAddToCart,
 }: GalleryViewProps) {
   const { locale, t } = useI18n();
   const [selectedCategorySlug, setSelectedCategorySlug] = useState<string | null>(null);
@@ -518,6 +520,7 @@ export default function GalleryView({
               projects={filteredProjects}
               selectedCategory={selectedCategoryName}
               onSelectProject={selectProject}
+              onAddToCart={onAddToCart}
             />
           </div>
         ) : (

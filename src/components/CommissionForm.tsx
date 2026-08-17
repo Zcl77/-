@@ -1,4 +1,4 @@
-import { FormEvent, useRef, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { FileImage, MessageSquareText, Send, Star } from 'lucide-react';
 import { REVIEW_LIMITS, validateImageFile, validateReviewInput } from '../domain/validation';
 import { InquiryInput, Project, Review, ReviewInput, SiteInfo } from '../types';
@@ -11,6 +11,8 @@ interface CommissionFormProps {
   projects: Project[];
   reviews: Review[];
   site: SiteInfo;
+  selectedProjectNames?: string[];
+  onInquirySubmitted?: () => void;
 }
 
 const EMPTY_INQUIRY: Omit<InquiryInput, 'attachments'> = {
@@ -31,6 +33,8 @@ export default function CommissionForm({
   projects,
   reviews,
   site,
+  selectedProjectNames = [],
+  onInquirySubmitted,
 }: CommissionFormProps) {
   const { t, errorMessage } = useI18n();
   const [inquiry, setInquiry] = useState(EMPTY_INQUIRY);
@@ -45,6 +49,14 @@ export default function CommissionForm({
   const [reviewMessage, setReviewMessage] = useState('');
   const reviewSubmitting = useRef(false);
   const inquirySubmitting = useRef(false);
+
+  useEffect(() => {
+    if (selectedProjectNames.length === 0 || inquiry.description) return;
+    setInquiry((current) => ({
+      ...current,
+      description: `购物车作品：${selectedProjectNames.join('、')}\n\n`,
+    }));
+  }, [inquiry.description, selectedProjectNames]);
 
   const setInquiryField = <K extends keyof typeof EMPTY_INQUIRY>(
     key: K,
@@ -71,6 +83,7 @@ export default function CommissionForm({
       setAttachments([]);
       setInquiryState('success');
       setInquiryMessage(t('工作室会按您留下的方式联系；第一版不会自动发送短信或微信消息。'));
+      onInquirySubmitted?.();
     } catch (reason) {
       setInquiryMessage(errorMessage(reason, '询价提交失败，请稍后重试。'));
       setInquiryState('error');
