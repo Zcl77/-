@@ -56,12 +56,7 @@ export default function SmartImage({
   // skeleton's opaque background.
   return (
     <span className="relative block h-full w-full overflow-hidden">
-      {!loaded && (
-        <span
-          className="skeleton absolute inset-0"
-          aria-hidden="true"
-        />
-      )}
+      {!loaded && <span className="skeleton absolute inset-0" aria-hidden="true" />}
       <img
         {...props}
         ref={imgRef}
