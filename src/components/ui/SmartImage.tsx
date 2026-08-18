@@ -1,4 +1,4 @@
-import { ImgHTMLAttributes, useEffect, useState } from 'react';
+import { ImgHTMLAttributes, useEffect, useRef, useState } from 'react';
 import { ImageOff } from 'lucide-react';
 import { useI18n } from '../../i18n';
 
@@ -19,10 +19,21 @@ export default function SmartImage({
   const { t } = useI18n();
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
     setFailed(false);
     setLoaded(false);
+  }, [src]);
+
+  // Handle cached / synchronously-loaded images (notably data URIs):
+  // the native onLoad event can fire before React attaches the listener,
+  // leaving the image stuck at opacity-0 with a skeleton overlay.
+  useEffect(() => {
+    const img = imgRef.current;
+    if (img && img.complete && img.naturalWidth > 0) {
+      setLoaded(true);
+    }
   }, [src]);
 
   if (!src || failed) {
@@ -38,11 +49,22 @@ export default function SmartImage({
     );
   }
 
+  // The wrapper is the positioning context for the skeleton. Without
+  // `relative` here, an absolutely-positioned skeleton escapes to a
+  // distant ancestor (or the initial containing block) when the call
+  // site's parent is `position: static`, blanketing the page with the
+  // skeleton's opaque background.
   return (
-    <>
-      {!loaded && <span className={`skeleton absolute inset-0 ${className}`} aria-hidden="true" />}
+    <span className="relative block h-full w-full overflow-hidden">
+      {!loaded && (
+        <span
+          className="skeleton absolute inset-0"
+          aria-hidden="true"
+        />
+      )}
       <img
         {...props}
+        ref={imgRef}
         src={src}
         alt={alt}
         className={`${className} ${loaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300`}
@@ -52,6 +74,6 @@ export default function SmartImage({
           onError?.(event);
         }}
       />
-    </>
+    </span>
   );
 }
