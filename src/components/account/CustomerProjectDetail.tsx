@@ -226,11 +226,11 @@ export default function CustomerProjectDetail({ projectId, onBack }: CustomerPro
             <strong className="text-studio-ink">{project.completionPercent}%</strong>
           </div>
           <div
-            className="mt-2 h-2 overflow-hidden rounded-full bg-studio-line"
+            className="progress-track mt-2 h-2"
             aria-label={t('项目完成 {percent}%', { percent: project.completionPercent })}
           >
             <span
-              className="block h-full bg-studio-brass"
+              className="progress-bar"
               style={{ width: `${Math.min(100, Math.max(0, project.completionPercent))}%` }}
             />
           </div>
@@ -249,9 +249,12 @@ export default function CustomerProjectDetail({ projectId, onBack }: CustomerPro
             {stages.length} {t('个阶段')}
           </span>
         </div>
-        <ol className="mt-5 grid grid-cols-1 gap-px overflow-hidden rounded-[6px] border border-studio-line bg-studio-line sm:grid-cols-2 xl:grid-cols-4">
+        <ol className="mt-5 grid grid-cols-1 gap-px overflow-hidden rounded-[10px] border border-studio-line bg-studio-line shadow-[0_2px_12px_rgba(0,0,0,0.1)] sm:grid-cols-2 xl:grid-cols-4">
           {stages.map((stage, index) => (
-            <li key={stage.id} className="min-w-0 bg-studio-surface p-4">
+            <li
+              key={stage.id}
+              className="min-w-0 bg-studio-surface-solid p-4 transition-colors duration-200 hover:bg-studio-raised"
+            >
               <div className="flex items-center justify-between gap-3">
                 <span className="text-[10px] text-studio-faint">{String(index + 1).padStart(2, '0')}</span>
                 <span
@@ -318,7 +321,7 @@ export default function CustomerProjectDetail({ projectId, onBack }: CustomerPro
                             key={image.id}
                             type="button"
                             onClick={() => setLightbox({ images: imageUrls, index, alt: update.title })}
-                            className="group aspect-[4/3] overflow-hidden rounded-[4px] border border-studio-line bg-black"
+                            className="group aspect-[4/3] overflow-hidden rounded-[6px] border border-studio-line bg-black transition-all duration-200 hover:border-studio-faint hover:shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
                             aria-label={t('放大查看 {name}', { name: image.altText })}
                           >
                             <SmartImage
@@ -466,7 +469,7 @@ export default function CustomerProjectDetail({ projectId, onBack }: CustomerPro
                 messages.map((message) => (
                   <article
                     key={message.id}
-                    className={`rounded-[6px] border p-3 ${message.isMine ? 'border-studio-brass/40 bg-studio-raised' : 'border-studio-line bg-studio-surface'}`}
+                    className={`rounded-[8px] border p-3 transition-colors duration-200 ${message.isMine ? 'border-studio-brass/40 bg-studio-raised' : 'border-studio-line bg-studio-surface-solid hover:border-studio-faint'}`}
                   >
                     <div className="flex items-center justify-between gap-3 text-[10px] text-studio-faint">
                       <strong className="text-studio-muted">{message.author.displayName}</strong>

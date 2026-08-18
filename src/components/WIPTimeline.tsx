@@ -75,7 +75,7 @@ export default function WIPTimeline({ posts, onOpenWork }: WIPTimelineProps) {
                         type="button"
                         onClick={() => setSelectedId(post.id)}
                         aria-pressed={active}
-                        className={`rounded-[6px] border p-4 text-left transition-colors duration-200 ${active ? 'border-studio-brass bg-studio-raised' : 'border-studio-line bg-studio-surface hover:border-studio-faint'}`}
+                        className={`rounded-[8px] border p-4 text-left transition-all duration-200 ${active ? 'border-studio-brass bg-studio-raised shadow-[0_0_0_2px_var(--color-studio-brass-glow)]' : 'border-studio-line bg-studio-surface-solid hover:border-studio-faint hover:bg-studio-raised'}`}
                       >
                         <span className="flex items-center gap-2 text-[10px] text-studio-faint">
                           <CalendarDays className="h-3.5 w-3.5" />
@@ -108,7 +108,7 @@ export default function WIPTimeline({ posts, onOpenWork }: WIPTimelineProps) {
                     <button
                       type="button"
                       onClick={() => setLightboxIndex(0)}
-                      className="group flex aspect-[16/10] w-full items-center justify-center overflow-hidden rounded-[6px] border border-studio-line bg-black"
+                      className="group flex aspect-[16/10] w-full items-center justify-center overflow-hidden rounded-[10px] border border-studio-line bg-black shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
                       aria-label={t('放大查看 {name}', { name: `${selected.title} ${t('图片')}` })}
                     >
                       <SmartImage
@@ -121,7 +121,7 @@ export default function WIPTimeline({ posts, onOpenWork }: WIPTimelineProps) {
                       />
                     </button>
                   ) : (
-                    <div className="flex min-h-48 items-center justify-center rounded-[6px] border border-studio-line bg-studio-surface text-xs text-studio-muted">
+                    <div className="flex min-h-48 items-center justify-center rounded-[10px] border border-studio-line bg-studio-surface-solid text-xs text-studio-muted">
                       <Images className="mr-2 h-4 w-4" />
                       {t('本篇日志未附过程图片')}
                     </div>
@@ -167,7 +167,7 @@ export default function WIPTimeline({ posts, onOpenWork }: WIPTimelineProps) {
                             key={image.id}
                             type="button"
                             onClick={() => setLightboxIndex(index)}
-                            className="group aspect-[4/3] overflow-hidden rounded-[4px] border border-studio-line bg-black"
+                            className="group aspect-[4/3] overflow-hidden rounded-[6px] border border-studio-line bg-black transition-all duration-200 hover:border-studio-faint hover:shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
                             aria-label={t('放大查看 {name}', { name: image.altText })}
                           >
                             <SmartImage

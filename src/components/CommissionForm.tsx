@@ -399,7 +399,10 @@ export default function CommissionForm({
                   <legend className="field-label">{t('评分 *')}</legend>
                   <div className="flex gap-1" role="radiogroup" aria-label={t('选择 1 到 5 星评分')}>
                     {[1, 2, 3, 4, 5].map((value) => (
-                      <label key={value} className="cursor-pointer rounded-[4px] p-1.5">
+                      <label
+                        key={value}
+                        className="group/star cursor-pointer rounded-[6px] p-1.5 transition-colors duration-150 hover:bg-studio-raised"
+                      >
                         <input
                           type="radio"
                           name="rating"
@@ -482,7 +485,7 @@ export default function CommissionForm({
                   {reviews.map((review) => (
                     <article
                       key={review.id}
-                      className="rounded-[6px] border border-studio-line bg-studio-surface p-5"
+                      className="rounded-[10px] border border-studio-line bg-studio-surface-solid p-5 shadow-[0_2px_12px_rgba(0,0,0,0.1)] transition-all duration-200 hover:border-studio-faint hover:shadow-[0_4px_20px_rgba(0,0,0,0.15)]"
                     >
                       <div className="flex flex-wrap items-center gap-2">
                         <strong className="font-serif text-sm text-studio-ink">{review.reviewerName}</strong>
