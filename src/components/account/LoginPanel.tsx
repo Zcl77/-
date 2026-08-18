@@ -39,7 +39,7 @@ export default function LoginPanel({ onLogin, onCustomerLogin, notice }: LoginPa
     <div className="page-shell">
       <div className="page-inner flex min-h-[calc(100dvh-4.5rem)] items-center py-10 lg:min-h-dvh">
         <section
-          className="mx-auto w-full max-w-md border-y border-studio-line py-8"
+          className="mx-auto w-full max-w-md rounded-[14px] border border-studio-line bg-studio-surface-solid p-8 shadow-[0_8px_36px_rgba(0,0,0,0.2)]"
           aria-labelledby="customer-login-title"
         >
           <span className="page-kicker">{t('私人项目访问')}</span>

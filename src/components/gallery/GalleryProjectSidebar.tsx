@@ -57,7 +57,9 @@ export default function GalleryProjectSidebar({
 
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-studio-muted">
             <span>{selectedProject.category}</span>
-            <span aria-hidden="true">/</span>
+            <span aria-hidden="true" className="text-studio-faint">
+              /
+            </span>
             <span>{selectedProject.scale}</span>
             {selectedProject.isDemo && (
               <span className="tag border-studio-warning/40 text-studio-warning">{t('演示内容')}</span>
@@ -88,6 +90,9 @@ export default function GalleryProjectSidebar({
                 {selectedProject.completionPercent}
                 <span className="ml-1 text-xs text-studio-muted">%</span>
               </dd>
+              <div className="progress-track mt-2 h-1">
+                <span className="progress-bar" style={{ width: `${selectedProject.completionPercent}%` }} />
+              </div>
             </div>
           </dl>
 
@@ -101,7 +106,7 @@ export default function GalleryProjectSidebar({
                 {selectedProject.worksteps.map((step) => (
                   <li key={step.id} className="relative pb-4 pl-5 last:pb-0">
                     <span
-                      className={`absolute -left-1 top-1 h-2 w-2 rounded-full ${step.status === 'ACTIVE' ? 'bg-studio-warning' : step.status === 'DONE' ? 'bg-studio-oxide' : 'bg-studio-line'}`}
+                      className={`absolute -left-[5px] top-1 h-2.5 w-2.5 rounded-full transition-all duration-200 ${step.status === 'ACTIVE' ? 'bg-studio-warning shadow-[0_0_8px_rgba(218,180,110,0.4)]' : step.status === 'DONE' ? 'bg-studio-oxide' : 'bg-studio-line'}`}
                     />
                     <div className="flex items-start justify-between gap-3">
                       <span className="text-xs leading-5 text-studio-muted">{step.name}</span>
@@ -142,9 +147,9 @@ export default function GalleryProjectSidebar({
                   type="button"
                   onClick={() => onSelectProject(project)}
                   aria-pressed={active}
-                  className={`group flex w-full items-center gap-3 rounded-[4px] border p-2 text-left transition-colors duration-200 ${active ? 'border-studio-brass bg-studio-raised' : 'border-studio-line hover:border-studio-faint hover:bg-studio-surface'}`}
+                  className={`group flex w-full items-center gap-3 rounded-[8px] border p-2 text-left transition-all duration-200 ${active ? 'border-studio-brass bg-studio-raised shadow-[0_0_0_2px_var(--color-studio-brass-glow)]' : 'border-studio-line hover:border-studio-faint hover:bg-studio-surface-solid hover:shadow-[0_2px_12px_rgba(0,0,0,0.1)]'}`}
                 >
-                  <span className="aspect-[4/3] w-20 shrink-0 overflow-hidden rounded-[2px] bg-black">
+                  <span className="aspect-[4/3] w-20 shrink-0 overflow-hidden rounded-[4px] bg-black">
                     <SmartImage
                       src={project.coverUrl}
                       alt={`${project.title} ${t('封面缩略图')}`}

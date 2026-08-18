@@ -392,7 +392,7 @@ export default function CustomerPortal({
                     return (
                       <article
                         key={order.id}
-                        className="rounded-[6px] border border-studio-line bg-studio-surface p-5"
+                        className="rounded-[10px] border border-studio-line bg-studio-surface-solid p-5 shadow-[0_2px_12px_rgba(0,0,0,0.1)] transition-all duration-200 hover:border-studio-faint hover:shadow-[0_4px_20px_rgba(0,0,0,0.15)]"
                       >
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
@@ -534,7 +534,7 @@ export default function CustomerPortal({
                 {projects.map((project) => (
                   <article
                     key={project.id}
-                    className="rounded-[6px] border border-studio-line bg-studio-surface p-5 md:p-6"
+                    className="rounded-[10px] border border-studio-line bg-studio-surface-solid p-5 shadow-[0_2px_12px_rgba(0,0,0,0.1)] transition-all duration-200 hover:border-studio-faint hover:shadow-[0_4px_20px_rgba(0,0,0,0.15)] md:p-6"
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
@@ -553,11 +553,8 @@ export default function CustomerPortal({
                       <span>{project.currentStage?.name || t('阶段待设置')}</span>
                       <strong className="text-studio-ink">{project.completionPercent}%</strong>
                     </div>
-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-studio-line">
-                      <span
-                        className="block h-full bg-studio-brass"
-                        style={{ width: `${project.completionPercent}%` }}
-                      />
+                    <div className="progress-track mt-2 h-1.5">
+                      <span className="progress-bar" style={{ width: `${project.completionPercent}%` }} />
                     </div>
                     <dl className="mt-5 grid grid-cols-1 gap-3 border-y border-studio-line py-4 text-xs sm:grid-cols-2">
                       <div>

@@ -184,7 +184,7 @@ export default function GalleryView({
                       onCategoryChange?.();
                     }}
                     aria-pressed={active}
-                    className={`min-h-9 shrink-0 rounded-[4px] border px-3 text-xs transition-colors duration-200 ${active ? 'border-studio-brass bg-studio-brass text-studio-canvas' : 'border-studio-line text-studio-muted hover:border-studio-faint hover:text-studio-ink'}`}
+                    className={`min-h-9 shrink-0 rounded-[6px] border px-3.5 text-xs font-medium transition-all duration-200 ${active ? 'border-studio-brass bg-studio-brass text-studio-canvas shadow-[0_2px_8px_rgba(196,165,114,0.2)]' : 'border-studio-line text-studio-muted hover:border-studio-faint hover:bg-studio-raised hover:text-studio-ink'}`}
                   >
                     {category.name}
                   </button>
@@ -198,7 +198,7 @@ export default function GalleryView({
           <div className="mt-6 grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-8 xl:gap-12">
             <div className="min-w-0 lg:col-span-8">
               <section aria-label={t('{name} 图片展示', { name: selectedProject.title })}>
-                <div className="group relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-[6px] border border-studio-line bg-black sm:aspect-[16/10]">
+                <div className="group relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-[10px] border border-studio-line bg-black shadow-[0_4px_24px_rgba(0,0,0,0.2)] sm:aspect-[16/10]">
                   <button
                     type="button"
                     onClick={openCurrentImage}
@@ -216,7 +216,7 @@ export default function GalleryView({
                     />
                   </button>
 
-                  <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-[4px] bg-studio-canvas/90 px-2.5 py-1.5 text-[10px] text-studio-muted">
+                  <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-[6px] bg-studio-canvas/90 px-2.5 py-1.5 text-[10px] text-studio-muted backdrop-blur-sm transition-all duration-200 group-hover:bg-studio-canvas/95 group-hover:text-studio-ink">
                     <Expand className="h-3.5 w-3.5" aria-hidden="true" />
                     <span>{t('查看完整图')}</span>
                   </div>
@@ -254,7 +254,7 @@ export default function GalleryView({
                         type="button"
                         onClick={() => setActiveMediaSelection(mediaSelection(item))}
                         aria-pressed={active}
-                        className={`group relative aspect-[4/3] w-24 shrink-0 overflow-hidden rounded-[4px] border bg-studio-surface sm:w-28 ${active ? 'border-studio-brass' : 'border-studio-line opacity-70 hover:opacity-100'}`}
+                        className={`group relative aspect-[4/3] w-24 shrink-0 overflow-hidden rounded-[6px] border bg-studio-surface-solid transition-all duration-200 sm:w-28 ${active ? 'border-studio-brass shadow-[0_0_0_2px_var(--color-studio-brass-glow)]' : 'border-studio-line opacity-70 hover:opacity-100 hover:border-studio-faint'}`}
                       >
                         <SmartImage
                           src={item.url}
@@ -264,7 +264,7 @@ export default function GalleryView({
                           loading="lazy"
                           decoding="async"
                         />
-                        <span className="absolute bottom-1 right-1 rounded-[2px] bg-studio-canvas/90 px-1.5 py-0.5 text-[9px] text-studio-muted">
+                        <span className="absolute bottom-1 right-1 rounded-[3px] bg-studio-canvas/90 px-1.5 py-0.5 text-[9px] text-studio-muted backdrop-blur-sm">
                           {index === 0 ? t('封面') : String(index).padStart(2, '0')}
                         </span>
                       </button>
@@ -403,7 +403,7 @@ export default function GalleryView({
                       return (
                         <article
                           key={room.id}
-                          className={`group relative overflow-hidden rounded-[6px] border bg-studio-surface ${active ? 'border-studio-brass' : 'border-studio-line'}`}
+                          className={`group relative overflow-hidden rounded-[10px] border bg-studio-surface-solid transition-all duration-200 ${active ? 'border-studio-brass shadow-[0_0_0_2px_var(--color-studio-brass-glow)]' : 'border-studio-line hover:border-studio-faint hover:shadow-[0_4px_20px_rgba(0,0,0,0.15)]'}`}
                         >
                           <button
                             type="button"
@@ -552,7 +552,10 @@ export default function GalleryView({
         )}
 
         <footer className="mt-14 flex flex-col justify-between gap-2 border-t border-studio-line py-6 text-[10px] text-studio-faint sm:flex-row">
-          <span>{locale === 'zh-CN' ? '知行造境 / Zhixing Studio' : 'Zhixing Studio'}</span>
+          <span className="flex items-center gap-2">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-studio-brass/40" />
+            {locale === 'zh-CN' ? '知行造境 / Zhixing Studio' : 'Zhixing Studio'}
+          </span>
           <span>{t('微缩建筑与场景制作')}</span>
         </footer>
       </div>
